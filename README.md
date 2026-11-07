@@ -2,13 +2,24 @@
 
 本地运行的中文学习工具。点击知识点逐层展开，右键提问后，问题和回答继续生长在同一张图里。
 
-## Apple Silicon Mac
+## 下载安装版
 
-1.1.0 新增 Mac 原生启动器、钥匙串和 ARM 安装包构建流程。当前源码已准备，首次 `.pkg` 尚待 GitHub Mac 构建验证与发布；不能将源码包当作安装包。构建和签名说明见 [MACOS.md](MACOS.md)。
+从 [GitHub Releases](https://github.com/mmasondu114/zhizhi/releases/latest) 下载对应平台文件：
 
-安装后应用内置运行环境；数据位于 `~/Library/Application Support/Zhizhi`，设置中可检查 GitHub 新版本。
+| 系统 | 安装文件 | 打开方式 |
+|---|---|---|
+| Windows 10/11 x64 | windows-x64-setup.exe | 安装后从开始菜单打开「知枝」 |
+| macOS 14+、Apple Silicon | macos-arm64.pkg | 安装后从应用程序打开 Zhizhi |
 
-## Windows 一键启动
+安装版内置 Node.js 和运行依赖，自动启动本地后端并打开浏览器。Windows 从托盘退出，Mac 从应用菜单退出。关闭浏览器标签页不会退出后端。
+
+当前没有开发者代码签名与 Apple 公证，系统可能提示未知发布者。安装包与校验值以正式 Release 附件为准；不要关闭系统全局安全保护。
+
+设置底部可「检查更新」并下载对应系统安装包。升级前退出知枝。Windows 数据位于 `%LOCALAPPDATA%\Zhizhi\data`，Mac 位于 `~/Library/Application Support/Zhizhi`，升级不覆盖学习数据。旧源码版的图可用 JSON 导出/导入迁移。密钥跨账户或系统需要重填。
+
+构建与测试：[Mac](MACOS.md)、[Windows](WINDOWS.md)。
+
+## Windows 从源码启动
 
 双击 **Start.cmd**，然后打开 **http://127.0.0.1:4317**。
 

@@ -51,7 +51,7 @@ export async function createApp({dataDir=defaultDataDir({root}),port=Number(proc
  app.use((err,req,res,next)=>{if(res.headersSent)return next(err);const error=err instanceof z.ZodError?'数据格式不正确，未覆盖原有内容':err.message||'服务异常';res.status(err.code==='LIMIT_FILE_SIZE'?413:400).json({error});});
  return app;
 }
-if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+if(process.argv[1]&&await fs.realpath(process.argv[1]).catch(()=>path.resolve(process.argv[1]))===await fs.realpath(fileURLToPath(import.meta.url))){
  const port=Number(process.env.PORT||4317);const app=await createApp({port,dev:process.argv.includes('--dev')});const server=app.listen(port,'127.0.0.1',()=>console.log(`知枝已启动 http://127.0.0.1:${port}`));server.on('error',e=>{console.error(e.code==='EADDRINUSE'?'端口已占用，请打开已运行的应用或设置 PORT':e.message);process.exit(1);});
  let stopping=false;const shutdown=()=>{if(stopping)return;stopping=true;app.locals.shutdown();server.closeIdleConnections();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),1500).unref();};process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);
 }

@@ -2,6 +2,7 @@ name: Desktop installers
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md']
     tags: ['v*']
   workflow_dispatch:
 permissions:
@@ -57,6 +58,7 @@ jobs:
           path: |
             release/*
             test-results/*.json
+            test-results/*.png
           if-no-files-found: warn
   windows:
     runs-on: windows-2025
@@ -97,6 +99,7 @@ jobs:
           path: |
             release/*
             test-results/*.json
+            test-results/*.png
           if-no-files-found: warn
   publish:
     needs: [build-test-release, windows]

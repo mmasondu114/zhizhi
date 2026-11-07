@@ -65,7 +65,10 @@ codesign "${SIGN_ARGS[@]}" "$APP"
 codesign --verify --deep --strict "$APP"
 # Test the actual bundled runtime before packaging.
 [ "$("$RES/runtime/bin/node" -p 'process.platform+"/"+process.arch')" = 'darwin/arm64' ]
-"$APP/Contents/MacOS/Zhizhi" --smoke-test
+if ! "$APP/Contents/MacOS/Zhizhi" --smoke-test; then
+  if [ "${CI:-}" = true ]; then tail -60 "$HOME/Library/Application Support/Zhizhi/server.log" || true; fi
+  exit 1
+fi
 pkgbuild --analyze --root "$WORK/payload" "$WORK/components.plist"
 /usr/libexec/PlistBuddy -c 'Set :0:BundleIsRelocatable false' "$WORK/components.plist"
 mkdir -p "$WORK/installer-scripts"
