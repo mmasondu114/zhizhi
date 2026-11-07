@@ -1,0 +1,14 @@
+node_modules/
+dist/
+data/
+test-results/
+*.log
+
+release/
+build/
+.DS_Store
+*.p12
+*.p8
+*.cer
+.env*
+platform/macos/zhizhi-keychain

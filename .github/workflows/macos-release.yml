@@ -1,0 +1,60 @@
+name: Apple Silicon package
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: macos-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build-test-release:
+    runs-on: macos-15
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
+          cache: npm
+      - name: Verify Apple Silicon runner
+        run: test "$(uname -m)" = arm64
+      - run: npm ci --no-audit --no-fund
+      - name: Build and exercise native Keychain helper
+        run: |
+          xcrun swiftc -target arm64-apple-macos14.0 -O -framework Security platform/macos/Keychain.swift -o platform/macos/zhizhi-keychain
+          codesign --force --sign - platform/macos/zhizhi-keychain
+          TEST_KEYCHAIN_PASS="$(openssl rand -hex 24)"
+          TEST_KEYCHAIN="$RUNNER_TEMP/zhizhi-test.keychain-db"
+          security create-keychain -p "$TEST_KEYCHAIN_PASS" "$TEST_KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$TEST_KEYCHAIN"
+          security unlock-keychain -p "$TEST_KEYCHAIN_PASS" "$TEST_KEYCHAIN"
+          security list-keychains -d user -s "$TEST_KEYCHAIN"
+          security default-keychain -d user -s "$TEST_KEYCHAIN"
+          npm test
+      - run: npm run build
+      - run: npx playwright install chromium
+      - name: Browser regressions on native ARM Chromium
+        run: |
+          npm run test:browser
+          node tests/readability.mjs
+          node tests/interaction-update.mjs
+          node tests/regressions.mjs
+      - name: Build self-contained pkg
+        run: bash scripts/build-macos.sh
+      - name: Install, start bundled runtime, and test upgrade persistence
+        run: node scripts/test-macos-package.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-arm64-validation
+          path: |
+            release/*
+            test-results/*.json
+          if-no-files-found: warn

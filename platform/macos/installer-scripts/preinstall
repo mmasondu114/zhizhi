@@ -1,0 +1,8 @@
+#!/bin/bash
+set -eu
+# Refuse to replace a running application; never kill arbitrary user processes.
+if /bin/ps -axo comm= | /usr/bin/grep -Fxq '/Applications/Zhizhi.app/Contents/MacOS/Zhizhi'; then
+  echo 'Please quit Zhizhi from its application menu before installing an update.' >&2
+  exit 1
+fi
+exit 0
