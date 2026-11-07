@@ -9,10 +9,11 @@ export function newerVersion(candidate,current=APP_VERSION){
  const a=parse(candidate),b=parse(current);if(!a||!b)return false;
  for(let i=0;i<3;i++){if(a[i]!==b[i])return a[i]>b[i];}return false;
 }
-export function releaseSummary(release){
+export function releaseSummary(release,platform=process.platform){
  const version=String(release.tag_name||'').replace(/^v/,'');
  if(!/^\d+\.\d+\.\d+$/.test(version)||release.draft||release.prerelease)throw new Error('发布版本格式不正确');
- const asset=release.assets?.find(a=>a.name===`Zhizhi-${version}-macos-arm64.pkg`);
+ const suffix=platform==='win32'?'windows-x64-setup.exe':platform==='darwin'?'macos-arm64.pkg':null;
+ const asset=suffix?release.assets?.find(a=>a.name===`Zhizhi-${version}-${suffix}`):null;
  const expected=`https://github.com/${RELEASE_REPOSITORY}/releases/download/${release.tag_name}/${asset?.name}`;
  return {currentVersion:APP_VERSION,version,available:newerVersion(version),releaseUrl:`${RELEASES_URL}/tag/${release.tag_name}`,downloadUrl:asset?.browser_download_url===expected?expected:null};
 }

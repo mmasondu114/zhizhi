@@ -21,9 +21,9 @@ test('update versions compare numerically and reject prerelease or malformed val
 });
 test('update downloads are restricted to the exact repository release asset',()=>{
  const name='Zhizhi-1.2.0-macos-arm64.pkg',url='https://github.com/mmasondu114/zhizhi/releases/download/v1.2.0/'+name;
- const result=releaseSummary({tag_name:'v1.2.0',assets:[{name,browser_download_url:url}]});
+ const result=releaseSummary({tag_name:'v1.2.0',assets:[{name,browser_download_url:url}]},'darwin');
  assert.equal(result.downloadUrl,url);assert.equal(result.currentVersion,APP_VERSION);
- assert.equal(releaseSummary({tag_name:'v1.2.0',assets:[{name,browser_download_url:'https://evil.example/installer.pkg'}]}).downloadUrl,null);
+ assert.equal(releaseSummary({tag_name:'v1.2.0',assets:[{name,browser_download_url:'https://evil.example/installer.pkg'}]},'darwin').downloadUrl,null);
  assert.throws(()=>releaseSummary({tag_name:'../escape'}));
  assert.throws(()=>releaseSummary({tag_name:'v1.2.0',draft:true}));
 });
@@ -36,3 +36,5 @@ test('Mac Keychain real save/read/delete through native helper',{skip:process.pl
  try{assert.match(ref,/^keychain:/);assert.ok(!ref.includes(value));assert.equal(await unprotect(ref),value);}finally{await forgetSecret(ref);}
  await assert.rejects(unprotect(ref),/钥匙串/);
 });
+
+test("Windows update picks Windows installer",()=>{const name="Zhizhi-1.2.0-windows-x64-setup.exe",url="https://github.com/mmasondu114/zhizhi/releases/download/v1.2.0/"+name;assert.equal(releaseSummary({tag_name:"v1.2.0",assets:[{name,browser_download_url:url}]},"win32").downloadUrl,url);assert.equal(releaseSummary({tag_name:"v1.2.0",assets:[{name,browser_download_url:url}]},"linux").downloadUrl,null);});

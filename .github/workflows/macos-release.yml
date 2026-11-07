@@ -1,4 +1,4 @@
-name: Apple Silicon package
+name: Desktop installers
 on:
   push:
     branches: [main]
@@ -58,3 +58,84 @@ jobs:
             release/*
             test-results/*.json
           if-no-files-found: warn
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install chromium
+      - name: Browser regressions
+        shell: pwsh
+        run: |
+          $env:CHROME_PATH = node -e "console.log(require('@playwright/test').chromium.executablePath())"
+          npm run test:browser
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node tests/readability.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node tests/interaction-update.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node tests/regressions.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Build standalone Windows installer
+        shell: pwsh
+        run: ./scripts/build-windows.ps1
+      - name: Install, upgrade, and uninstall with user data preserved
+        run: node scripts/test-windows-package.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-x64-validation
+          path: |
+            release/*
+            test-results/*.json
+          if-no-files-found: warn
+  publish:
+    needs: [build-test-release, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-validation'
+          merge-multiple: true
+          path: artifacts
+      - name: Publish both verified installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          TAG="v$VERSION"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$TAG" ]]; then
+            echo 'Version and tag do not match' >&2; exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo 'Version already published. Increase package.json version for the next update.'; exit 0
+          fi
+          PKG="artifacts/release/Zhizhi-${VERSION}-macos-arm64.pkg"
+          EXE="artifacts/release/Zhizhi-${VERSION}-windows-x64-setup.exe"
+          test -s "$PKG" && test -s "$EXE"
+          (cd artifacts/release && sha256sum *.pkg *.exe > SHA256SUMS.txt)
+          cp artifacts/test-results/macos-install.json artifacts/Mac-validation.json
+          cp artifacts/test-results/windows-install.json artifacts/Windows-validation.json
+          cat > artifacts/notes.md <<'NOTES'
+          ## 知枝 · Windows 与 Apple Silicon
+          - Windows 10/11 x64：下载 `windows-x64-setup.exe`，双击安装，从开始菜单打开知枝。
+          - macOS 14+、M 系列：下载 `macos-arm64.pkg`，安装后从“应用程序”打开 Zhizhi。
+          - 两个安装包都内置 Node.js 与运行依赖，无需另外安装开发工具。
+          - 图谱保存在用户数据目录；API Key 由 Windows DPAPI / Mac 钥匙串保护。升级前退出知枝，新版本保留学习数据。
+          - 设置中可检查更新，并下载对应系统安装包。
+          - **未配置开发者代码签名：Windows 可能显示 SmartScreen，Mac 包未使用 Developer ID 签名与公证。** 请核对本仓库来源及 SHA256；不要关闭系统全局安全保护。
+          - 发布前已在独立 Windows 与 ARM Mac runner 执行单元、浏览器、真实安装、启动和覆盖安装持久化测试。附件包含安装验证结果。真实 Mac/Windows 模型账号登录需用户在官方客户端完成。
+          NOTES
+          gh release create "$TAG" "$PKG" "$EXE" artifacts/release/SHA256SUMS.txt artifacts/Mac-validation.json artifacts/Windows-validation.json --target "$GITHUB_SHA" --title "知枝 $VERSION · Windows / Apple Silicon" --notes-file artifacts/notes.md --latest
