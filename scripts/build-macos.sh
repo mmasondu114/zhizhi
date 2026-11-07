@@ -87,9 +87,12 @@ volume=ET.SubElement(root,'volume-check'); versions=ET.SubElement(volume,'allowe
 tree.write(p,encoding='utf-8',xml_declaration=True)
 PY
 OUTPUT="$(pwd)/release/Zhizhi-${VERSION}-macos-arm64.pkg"
-PKG_SIGN=()
-if [ -n "${MAC_INSTALLER_SIGN_IDENTITY:-}" ]; then PKG_SIGN=(--sign "$MAC_INSTALLER_SIGN_IDENTITY" --timestamp); fi
-productbuild --distribution "$WORK/distribution.xml" --package-path "$WORK" "${PKG_SIGN[@]}" "$OUTPUT"
+if [ -n "${MAC_INSTALLER_SIGN_IDENTITY:-}" ]; then
+  productbuild --distribution "$WORK/distribution.xml" --package-path "$WORK" --sign "$MAC_INSTALLER_SIGN_IDENTITY" --timestamp "$OUTPUT"
+else
+  productbuild --distribution "$WORK/distribution.xml" --package-path "$WORK" "$OUTPUT"
+fi
+test -s "$OUTPUT" || { echo "Installer output is missing" >&2; exit 1; }
 if [ -n "${MAC_NOTARY_PROFILE:-}" ]; then
   [ "$IDENTITY" != '-' ] && [ -n "${MAC_INSTALLER_SIGN_IDENTITY:-}" ] || { echo 'Notarization requires both Developer ID identities' >&2; exit 1; }
   xcrun notarytool submit "$OUTPUT" --keychain-profile "$MAC_NOTARY_PROFILE" --wait

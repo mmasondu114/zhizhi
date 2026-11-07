@@ -39,7 +39,10 @@ jobs:
           security list-keychains -d user -s "$TEST_KEYCHAIN"
           security default-keychain -d user -s "$TEST_KEYCHAIN"
           npm test
-      - run: npm run build
+      - name: Build self-contained pkg
+        run: bash scripts/build-macos.sh
+      - name: Install, start bundled runtime, and test upgrade persistence
+        run: node scripts/test-macos-package.mjs
       - run: npx playwright install chromium
       - name: Browser regressions on native ARM Chromium
         run: |
@@ -47,10 +50,6 @@ jobs:
           node tests/readability.mjs
           node tests/interaction-update.mjs
           node tests/regressions.mjs
-      - name: Build self-contained pkg
-        run: bash scripts/build-macos.sh
-      - name: Install, start bundled runtime, and test upgrade persistence
-        run: node scripts/test-macos-package.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
