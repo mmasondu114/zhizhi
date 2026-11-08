@@ -206,3 +206,6 @@ body:has(.modal-overlay) .toast{top:12px}
 @media(max-width:1100px){.detail-presence{--detail-width:340px}}
 @media(max-width:760px){.detail-presence{--detail-width:min(382px,96vw);position:absolute;right:0;top:62px;bottom:0;z-index:8}.detail-presence .details{position:static}}
 @media(prefers-reduced-motion:reduce){.detail-presence{animation:none!important}}
+
+.node-home-target{position:absolute;z-index:4;pointer-events:none;border:2px solid #75a991;border-radius:17px;background:transparent;box-sizing:border-box}
+.node-home-target>span{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);padding:4px 9px;border:1px solid #b8d5c6;border-radius:6px;background:#edf6f1;color:#355c4a;font-size:12px;white-space:nowrap;line-height:1.4}

@@ -20,25 +20,27 @@ export function branchFrame(from,to,progress){
 
 // Animate only presentation coordinates. Saved graph positions stay final.
 export function useBranchMotion(nodes,edges,graphId){
- const [view,setView]=useState({nodes,edges}),current=useRef(view),target=useRef({nodes,edges}),frame=useRef(0),identity=useRef(graphId);
+ const [view,setView]=useState({nodes,edges}),current=useRef(view),target=useRef({nodes,edges}),frame=useRef(0),identity=useRef(graphId),dragging=useRef(new Set());
  const publish=useCallback(value=>{current.current=value;setView(value);},[]);
  const stop=useCallback(()=>{cancelAnimationFrame(frame.current);frame.current=0;},[]);
  useLayoutEffect(()=>{
   const next={nodes,edges},oldTarget=target.current;target.current=next;
   const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if(identity.current!==graphId||!current.current.nodes.length||reduced){identity.current=graphId;stop();publish(next);return;}
-  if(sameLayout(oldTarget.nodes,nodes)){
-   if(!frame.current)publish(next);
-   return;
-  }
+  if(identity.current!==graphId){identity.current=graphId;dragging.current.clear();stop();publish(next);return;}
+  if(dragging.current.size){stop();const live=new Map(current.current.nodes.map(n=>[n.id,n]));publish({...next,nodes:nodes.map(n=>({...n,position:live.get(n.id)?.position||n.position,dragging:dragging.current.has(n.id)}))});return;}
+  if(!current.current.nodes.length||reduced){stop();publish(next);return;}
+  if(frame.current&&sameLayout(oldTarget.nodes,nodes))return;
+  if(!frame.current&&sameLayout(current.current.nodes,nodes)){publish(next);return;}
   stop();const start=current.current,started=performance.now();
   const tick=now=>{const p=Math.min(1,(now-started)/DURATION);if(p===1){frame.current=0;publish(target.current);return;}publish(branchFrame(start,target.current,p));frame.current=requestAnimationFrame(tick);};
   publish(branchFrame(start,next,0));frame.current=requestAnimationFrame(tick);
  },[nodes,edges,graphId,publish,stop]);
- useLayoutEffect(()=>{const media=window.matchMedia('(prefers-reduced-motion: reduce)'),change=()=>{if(media.matches){stop();publish(target.current);}};media.addEventListener('change',change);return()=>{media.removeEventListener('change',change);stop();};},[publish,stop]);
+ useLayoutEffect(()=>{const media=window.matchMedia('(prefers-reduced-motion: reduce)'),change=()=>{if(media.matches){stop();if(!dragging.current.size)publish(target.current);}};media.addEventListener('change',change);return()=>{media.removeEventListener('change',change);stop();};},[publish,stop]);
  const onNodesChange=useCallback(changes=>{
-  if(changes.some(c=>c.type==='position'&&c.dragging)){stop();publish({...target.current,nodes:applyNodeChanges(changes,target.current.nodes)});}
-  else publish({...current.current,nodes:applyNodeChanges(changes,current.current.nodes)});
+  for(const change of changes)if(change.type==='position'&&change.dragging){dragging.current.add(change.id);stop();}
+  publish({...current.current,nodes:applyNodeChanges(changes,current.current.nodes)});
  },[publish,stop]);
- return {...view,onNodesChange};
+ const beginDrag=useCallback(id=>{stop();dragging.current.add(id);},[stop]);
+ const endDrag=useCallback(id=>{dragging.current.delete(id);},[]);
+ return {...view,onNodesChange,beginDrag,endDrag};
 }
