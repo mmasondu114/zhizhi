@@ -9,7 +9,16 @@ const root=app.isPackaged?path.join(process.resourcesPath,'backend'):path.resolv
 const dataRoot=process.env.TREE_DATA_DIR||(process.platform==='darwin'?path.join(app.getPath('appData'),'Zhizhi'):path.join(process.env.LOCALAPPDATA,'Zhizhi','data'));
 app.setPath('userData',path.join(dataRoot,'desktop-profile'));
 app.setAppUserModelId(appId);
-let child,window,quitting=false,log,recoveries=0;
+let child,window,quitting=false,log,recoveries=0,session,tick;
+const sessionFile=path.join(dataRoot,'desktop-session.json');
+function saveSession(state){if(!session)return;try{require('node:fs').writeFileSync(sessionFile,JSON.stringify({...session,state,lastSeen:new Date().toISOString()}));}catch{}}
+function beginSession(){
+ require('node:fs').mkdirSync(dataRoot,{recursive:true});
+ try{const previous=JSON.parse(require('node:fs').readFileSync(sessionFile,'utf8'));if(previous.state==='running')diagnostic('previous-session-interrupted',{previous});}catch{}
+ session={pid:process.pid,parentPid:process.ppid,startedAt:new Date().toISOString()};saveSession('running');diagnostic('app-start',session);
+ tick=setInterval(()=>saveSession('running'),10000);tick.unref();
+ process.once('exit',code=>{clearInterval(tick);saveSession('exited');diagnostic('app-exit',{code});});
+}
 function diagnostic(event,detail={}){require('node:fs').mkdirSync(dataRoot,{recursive:true});require('node:fs').appendFile(path.join(dataRoot,'desktop.log'),JSON.stringify({at:new Date().toISOString(),event,...detail})+'\n',()=>{});}
 process.on('uncaughtExceptionMonitor',error=>diagnostic('main-exception',{message:error.message,stack:error.stack}));
 app.on('child-process-gone',(_event,details)=>diagnostic('child-process-gone',details));
@@ -69,6 +78,6 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
  app.on('second-instance',()=>{if(window){if(window.isMinimized())window.restore();window.show();window.focus();}});
  app.on('window-all-closed',()=>app.quit());
  app.on('before-quit',event=>{if(quitting)return;diagnostic('quit-requested');event.preventDefault();quitting=true;(async()=>{let saved=true,timer;if(window&&!window.isDestroyed()){try{saved=await Promise.race([window.webContents.executeJavaScript("typeof window.zhizhiFlush==='function'?window.zhizhiFlush():true"),new Promise(resolve=>timer=setTimeout(()=>resolve(false),15000))]);}catch{saved=false;}finally{clearTimeout(timer);}}if(!saved&&!smoke){quitting=false;await dialog.showMessageBox(window,{type:'error',title:'尚未保存',message:'保存暂未完成，窗口已保留。请重试保存后再退出。'});return;}if(!saved)process.exitCode=1;await stopBackend();app.exit(process.exitCode||0);})().catch(()=>app.exit(1));});
- app.whenReady().then(startBackend).then(createWindow).catch(async error=>{process.exitCode=1;if(smoke)console.error(error.message);else await dialog.showMessageBox({type:'error',title:'知枝暂时无法启动',message:error.message});app.quit();});
+ app.whenReady().then(beginSession).then(startBackend).then(createWindow).catch(async error=>{process.exitCode=1;if(smoke)console.error(error.message);else await dialog.showMessageBox({type:'error',title:'知枝暂时无法启动',message:error.message});app.quit();});
 }
 

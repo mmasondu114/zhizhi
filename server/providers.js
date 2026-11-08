@@ -17,16 +17,17 @@ JSON格式：${JSON.stringify(outputSchema)}。公式为纯LaTeX字符串，无�
 export function runProcess(command,args,{input='',signal,timeout=120000,cwd,maxBytes=200000,onOutput}={}){
  return new Promise((resolve,reject)=>{
   if(signal?.aborted)return reject(new Error('请求已取消'));
-  const child=spawn(command,args,{shell:false,windowsHide:true,detached:process.platform!=='win32',cwd,stdio:['pipe','pipe','pipe']});let out='',err='',done=false;
+  const child=spawn(command,args,{shell:false,windowsHide:true,detached:process.platform!=='win32',cwd,stdio:['pipe','pipe','pipe']});let out='',err='',done=false,terminationError,terminationTimer;
   function kill(){if(process.platform==='win32'&&child.pid)spawn('taskkill.exe',['/PID',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'}).on('error',()=>{try{child.kill();}catch{}});else try{process.kill(-child.pid,'SIGKILL');}catch{child.kill('SIGKILL');}}
-  function finish(error){if(done)return;done=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(out);}
-  const abort=()=>{kill();finish(new Error(signal?.reason?.name==='TimeoutError'?'请求超时，请重试；已完成的教材批次会复用':'请求已取消'));};const timer=setTimeout(()=>{kill();finish(new Error('请求超时，请稍后重试'));},timeout);
-  signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted){abort();return;}
-  child.stdout.on('data',b=>{if(done)return;out+=b.toString();onOutput?.(out.length);if(out.length>maxBytes){kill();finish(new Error('客户端输出过长'));}});
+  function finish(error){if(done)return;done=true;clearTimeout(timer);clearTimeout(terminationTimer);signal?.removeEventListener('abort',abort);error=terminationError||error;error?reject(error):resolve(out);}
+  const terminate=error=>{if(done||terminationError)return;terminationError=error;clearTimeout(timer);terminationTimer=setTimeout(()=>finish(error),3000);kill();};
+  const abort=()=>terminate(new Error(signal?.reason?.name==='TimeoutError'?'请求超时，请重试；已完成的教材批次会复用':'请求已取消'));const timer=setTimeout(()=>terminate(new Error('请求超时，请稍后重试')),timeout);
+  signal?.addEventListener('abort',abort,{once:true});
+  child.stdout.on('data',b=>{if(done||terminationError)return;out+=b.toString();onOutput?.(out.length);if(out.length>maxBytes){terminate(new Error('客户端输出过长'));}});
   child.stderr.on('data',b=>{err=(err+b.toString()).slice(-4000);});
   child.on('error',()=>finish(new Error('客户端未安装或无法启动')));
   child.on('close',code=>finish(code?new Error(/429|rate.?limit|too many requests/i.test(err+' '+out)?'429：请求过多，请稍后重试':`客户端退出（${code}）；请检查官方客户端登录、网络和模型配置`):null));
-  child.stdin.on('error',()=>{});child.stdin.end(input);
+  child.stdin.on('error',()=>{});if(signal?.aborted){abort();return;}child.stdin.end(input);
  });
 }
 export function findClient(kind,custom=''){
@@ -93,7 +94,7 @@ export async function callProvider(config,context,{signal,timeoutMs,onProgress}=
    onProgress?.({stage:'validating'});
    const response=clientText(config.kind,raw);
    return parseGeneration(response,context.materials?.map(m=>m.id)||[],{allowEmpty});
-  }finally{await fs.rm(cwd,{recursive:true,force:true});}
+  }finally{await fs.rm(cwd,{recursive:true,force:true,maxRetries:8,retryDelay:100}).catch(()=>console.warn('模型临时目录暂被占用，保留原始请求结果'));}
  }
  throw new Error('未选择可用的模型提供方');
 }
