@@ -1,13 +1,13 @@
 import UpdatePanel from './UpdatePanel';
 import React,{useState} from 'react';
-export default function SettingsForm({settings,clients,onSave,notify,refreshClients,api}){
+export default function SettingsForm({settings,clients,onSave,notify,refreshClients,api,onConnectionChange=()=>{}}){
  const [kind,setKind]=useState(settings.selected==='demo'?'codex':settings.selected);
  const [drafts,setDrafts]=useState({}),[working,setWorking]=useState(false),[result,setResult]=useState('');
  const values={...settings.providers[kind],...drafts[kind]},cli=kind==='codex'||kind==='claude',group=cli?'client':kind==='demo'?'demo':'api';
  const change=(key,value)=>setDrafts(d=>({...d,[kind]:{...d[kind],[key]:value}}));
  const choose=k=>{setKind(k);setResult('');};
  const save=()=>onSave({selected:kind,...(kind!=='demo'?{provider:{...values,kind,hasKey:undefined,secret:undefined}}:{})});
- const connect=async e=>{e.preventDefault();setWorking(true);setResult(kind==='demo'?'正在切换…':'正在测试连接，通常需要十几秒…');try{await save();if(kind!=='demo'){const r=await api('/test',{method:'POST',body:JSON.stringify({kind})});setResult('已连接 · '+r.message);}else setResult('已使用离线示例，不调用 AI');change('key','');}catch(e){setResult('连接未完成：'+e.message);}finally{setWorking(false);}};
+ const connect=async e=>{e.preventDefault();setWorking(true);setResult(kind==='demo'?'正在切换…':'正在测试连接，通常需要十几秒…');try{await save();onConnectionChange({kind,status:kind==='demo'?'disconnected':'connecting'});if(kind!=='demo'){const r=await api('/test',{method:'POST',body:JSON.stringify({kind})});onConnectionChange(r.connection||{kind,status:'connected'});setResult('已连接 · '+r.message);}else setResult('已使用离线示例，不调用 AI');change('key','');}catch(e){onConnectionChange({kind,status:'error'});setResult('连接未完成：'+e.message);}finally{setWorking(false);}};
  return <form className="settings-content simple-settings" onSubmit={connect}>
  <p className="settings-intro">选一种方式，连接后就能点击知识点继续探索。</p>
  <div className="connection-choices" role="tablist" aria-label="连接方式">

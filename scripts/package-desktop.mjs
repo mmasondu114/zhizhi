@@ -1,0 +1,13 @@
+import {packager} from '@electron/packager';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+const [platform,arch,stage,out,icon]=process.argv.slice(2);
+if(!['win32','darwin'].includes(platform)||!['x64','arm64'].includes(arch))throw new Error('Invalid desktop target');
+const root=path.resolve(import.meta.dirname,'..'),pkg=JSON.parse(await fs.readFile(path.join(root,'package.json'),'utf8'));
+const shellDir=path.join(stage,'desktop-shell');await fs.mkdir(shellDir,{recursive:true});
+await fs.copyFile(path.join(root,'desktop','main.cjs'),path.join(shellDir,'main.cjs'));
+await fs.writeFile(path.join(shellDir,'package.json'),JSON.stringify({name:'zhizhi-desktop',version:pkg.version,main:'main.cjs',productName:'知枝'}));
+const resources=[path.join(stage,'backend'),path.join(stage,'runtime')];
+if(platform==='darwin')resources.push(path.join(stage,'zhizhi-keychain'));
+const results=await packager({dir:shellDir,out,name:'Zhizhi',executableName:'Zhizhi',platform,arch,electronVersion:pkg.devDependencies.electron,appVersion:pkg.version,appBundleId:'io.github.mmasondu114.zhizhi',icon,asar:true,prune:false,overwrite:true,extraResource:resources,...(platform==='darwin'?{osxSign:{identity:process.env.MAC_APP_SIGN_IDENTITY||'-',hardenedRuntime:!!process.env.MAC_APP_SIGN_IDENTITY,gatekeeperAssess:false},extendInfo:{CFBundleDisplayName:'知枝',LSMinimumSystemVersion:'14.0'}}:{win32metadata:{CompanyName:'Zhizhi',FileDescription:'知枝 · 交互式知识树',ProductName:'知枝'}})});
+console.log('Desktop bundle: '+results[0]);

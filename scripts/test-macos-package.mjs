@@ -16,7 +16,7 @@ let child;
 async function install(){await exec('/usr/bin/sudo',['/usr/sbin/installer','-pkg',pkg,'-target','/'],{timeout:180000,maxBuffer:200000});}
 async function stop(){if(child&&!child.killed){const closed=new Promise(r=>child.once('close',r));child.kill('SIGTERM');await closed;}child=null;}
 async function start(){
- child=spawn(runtime,[path.join(resources,'app','server','index.js')],{env:{...process.env,PORT:'14325',TREE_DATA_DIR:data,TREE_KEYCHAIN_HELPER:path.join(resources,'zhizhi-keychain')},stdio:['ignore','ignore','pipe']});
+ child=spawn(runtime,[path.join(resources,'backend','server','index.js')],{env:{...process.env,PORT:'14325',TREE_DATA_DIR:data,TREE_KEYCHAIN_HELPER:path.join(resources,'zhizhi-keychain')},stdio:['ignore','ignore','pipe']});
  child.stderr.on('data',()=>{});
  for(let i=0;i<50;i++){try{const health=await fetch('http://127.0.0.1:14325/api/health',{signal:AbortSignal.timeout(500)}).then(r=>r.json());assert.equal(health.version,version);assert.equal(health.appId,'io.github.mmasondu114.zhizhi');return;}catch{}await new Promise(r=>setTimeout(r,200));}
  throw new Error('Installed backend did not become ready');
@@ -24,7 +24,7 @@ async function start(){
 try{
  await install();report.checks.push('real installer completed');
  assert.equal((await exec(runtime,['-p','process.platform+"/"+process.arch'])).stdout.trim(),'darwin/arm64');report.checks.push('bundled native ARM runtime');
- await exec(path.join(app,'Contents','MacOS','Zhizhi'),['--smoke-test'],{timeout:60000});report.checks.push('native launcher started server');
+ await exec(path.join(app,'Contents','MacOS','Zhizhi'),['--smoke-test'],{timeout:60000});report.checks.push('desktop window started server');
  await start();let boot=await fetch('http://127.0.0.1:14325/api/bootstrap').then(r=>r.json());let headers={'Content-Type':'application/json','x-tree-token':boot.token};
  const graph=makeGraph('Mac 安装升级持久化测试','demo');
  assert.equal((await fetch('http://127.0.0.1:14325/api/graphs/'+graph.id,{method:'PUT',headers,body:JSON.stringify(graph)})).status,200);

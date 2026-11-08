@@ -50,6 +50,7 @@ jobs:
           node tests/readability.mjs
           node tests/interaction-update.mjs
           node tests/regressions.mjs
+          npm run test:desktop
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -86,6 +87,8 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node tests/regressions.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Desktop window and connection regression
+        run: npm run test:desktop
       - name: Build standalone Windows installer
         shell: pwsh
         run: ./scripts/build-windows.ps1
@@ -134,7 +137,8 @@ jobs:
           ## 知枝 · Windows 与 Apple Silicon
           - Windows 10/11 x64：下载 `windows-x64-setup.exe`，双击安装，从开始菜单打开知枝。
           - macOS 14+、M 系列：下载 `macos-arm64.pkg`，安装后从“应用程序”打开 Zhizhi。
-          - 两个安装包都内置 Node.js 与运行依赖，无需另外安装开发工具。
+          - 两个平台均为独立桌面应用窗口，不再打开浏览器；安装包内置运行环境。
+          - 未连接时右上角显示「连接到 Agent」，成功验证后显示已连接，失败时可直接重试。
           - 图谱保存在用户数据目录；API Key 由 Windows DPAPI / Mac 钥匙串保护。升级前退出知枝，新版本保留学习数据。
           - 设置中可检查更新，并下载对应系统安装包。
           - **未配置开发者代码签名：Windows 可能显示 SmartScreen，Mac 包未使用 Developer ID 签名与公证。** 请核对本仓库来源及 SHA256；不要关闭系统全局安全保护。

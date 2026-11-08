@@ -4,6 +4,8 @@
 
 ## 下载安装版
 
+1.2.0 起为独立桌面窗口。未连接时，右上角点击「连接到 Agent」即可选择 Codex、Claude Code 或 API；实际验证成功才显示已连接，失败后可直接重试。
+
 从 [GitHub Releases](https://github.com/mmasondu114/zhizhi/releases/latest) 下载对应平台文件：
 
 | 系统 | 安装文件 | 打开方式 |
@@ -11,7 +13,7 @@
 | Windows 10/11 x64 | windows-x64-setup.exe | 安装后从开始菜单打开「知枝」 |
 | macOS 14+、Apple Silicon | macos-arm64.pkg | 安装后从应用程序打开 Zhizhi |
 
-安装版内置 Node.js 和运行依赖，自动启动本地后端并打开浏览器。Windows 从托盘退出，Mac 从应用菜单退出。关闭浏览器标签页不会退出后端。
+安装版内置 Node.js 和运行依赖，直接打开独立桌面应用窗口，不再启动浏览器。关闭应用窗口时同时退出后台服务。
 
 当前没有开发者代码签名与 Apple 公证，系统可能提示未知发布者。安装包与校验值以正式 Release 附件为准；不要关闭系统全局安全保护。
 
