@@ -121,11 +121,12 @@ jobs:
         run: |
           VERSION="$(node -p 'require("./package.json").version')"
           TAG="v$VERSION"
+          if [[ "$GITHUB_REF" != refs/tags/* ]]; then TAG="testing"; fi
           if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$TAG" ]]; then
             echo 'Version and tag do not match' >&2; exit 1
           fi
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo 'Version already published. Increase package.json version for the next update.'; exit 0
+          if [[ "$TAG" != testing ]] && gh release view "$TAG" >/dev/null 2>&1; then
+            echo 'Version already published; testing builds keep the existing app version.'; exit 0
           fi
           PKG="artifacts/release/Zhizhi-${VERSION}-macos-arm64.pkg"
           EXE="artifacts/release/Zhizhi-${VERSION}-windows-x64-setup.exe"
@@ -144,4 +145,15 @@ jobs:
           - **未配置开发者代码签名：Windows 可能显示 SmartScreen，Mac 包未使用 Developer ID 签名与公证。** 请核对本仓库来源及 SHA256；不要关闭系统全局安全保护。
           - 发布前已在独立 Windows 与 ARM Mac runner 执行单元、浏览器、真实安装、启动和覆盖安装持久化测试。附件包含安装验证结果。真实 Mac/Windows 模型账号登录需用户在官方客户端完成。
           NOTES
-          gh release create "$TAG" "$PKG" "$EXE" artifacts/release/SHA256SUMS.txt artifacts/Mac-validation.json artifacts/Windows-validation.json --target "$GITHUB_SHA" --title "知枝 $VERSION · Windows / Apple Silicon" --notes-file artifacts/notes.md --latest
+          if [[ "$TAG" == testing ]]; then
+            printf '\n测试版：版本号保持 %s。教材可选，支持批量文件导入和底部确认教材。\n构建提交：%s\n' "$VERSION" "$GITHUB_SHA" >> artifacts/notes.md
+            if gh release view testing >/dev/null 2>&1; then
+              gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/testing" -f sha="$GITHUB_SHA" -F force=true
+              gh release upload testing "$PKG" "$EXE" artifacts/release/SHA256SUMS.txt artifacts/Mac-validation.json artifacts/Windows-validation.json --clobber
+              gh release edit testing --title "知枝 $VERSION · 测试版" --notes-file artifacts/notes.md --prerelease --latest=false
+            else
+              gh release create testing "$PKG" "$EXE" artifacts/release/SHA256SUMS.txt artifacts/Mac-validation.json artifacts/Windows-validation.json --target "$GITHUB_SHA" --title "知枝 $VERSION · 测试版" --notes-file artifacts/notes.md --prerelease --latest=false
+            fi
+          else
+            gh release create "$TAG" "$PKG" "$EXE" artifacts/release/SHA256SUMS.txt artifacts/Mac-validation.json artifacts/Windows-validation.json --target "$GITHUB_SHA" --title "知枝 $VERSION · Windows / Apple Silicon" --notes-file artifacts/notes.md --latest
+          fi

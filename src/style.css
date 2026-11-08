@@ -53,3 +53,9 @@ label{font-size:14px}label input,label textarea{font-size:15px}.muted{font-size:
 .update-panel{border-top:1px solid #e5dfed;margin-top:22px;padding-top:17px;color:#897b95;font-size:13px}.update-panel>div{display:flex;justify-content:space-between;align-items:center}.update-panel button{font-size:13px;color:#7153a0;padding:5px}.update-panel p{line-height:1.7}.update-panel a{color:#7153a0}.update-panel small{font-size:12px;line-height:1.7;display:block}
 
 .agent-connect{display:flex;align-items:center;gap:8px;flex-shrink:0;border:1px solid #7962b5;border-radius:9px;background:#7962b5;color:#fff;padding:9px 13px;font-size:13px;font-weight:600;white-space:nowrap}.agent-connect.is-connected{background:#f1edf8;color:#65508d;border-color:#ded4ee}.agent-dot{width:6px;height:6px;background:currentColor;border-radius:50%}.agent-connect:hover{filter:brightness(.97)}@media(max-width:760px){.topbar .graph-name,.topbar .materials-btn{display:none}.agent-connect{padding:8px 10px;font-size:12px}.topbar{gap:5px}.topbar .primary.small{padding:8px}.brand-sub{display:none}}
+
+.material-optional { margin-top: 14px; border-top: 1px solid var(--border, #e5e1ec); padding-top: 14px; }
+.material-optional summary { cursor: pointer; color: #6e6382; font-size: 14px; padding: 4px 0; }
+.material-optional[open] summary { margin-bottom: 14px; }
+.material-confirm { position: sticky; bottom: -28px; background: var(--surface, #fff); border-top: 1px solid var(--border, #e5e1ec); margin-top: 20px; padding: 12px 0 4px; }
+.material-confirm p { margin: 0 0 8px; }

@@ -26,7 +26,33 @@ try{
  await check('collapse and search automatically reveal ancestors',async()=>{await locate('标准差 σ');await node('标准差 σ').getByRole('button',{name:'折叠分支'}).click();let g=await currentGraph();assert.equal(g.nodes.find(n=>n.demoKey==='sd').collapsed,true);await locate('能再用简单的话说明吗？');g=await currentGraph();assert.equal(g.nodes.find(n=>n.demoKey==='sd').collapsed,false);});
  await check('drag threshold does not generate; deletion undo redo',async()=>{await locate('观测值 x');const box=await node('观测值 x').boundingBox();const before=(await currentGraph()).nodes.length;await page.mouse.move(box.x+80,box.y+70);await page.mouse.down();await page.mouse.move(box.x+145,box.y+95,{steps:8});await page.mouse.up();await page.waitForTimeout(500);assert.equal((await currentGraph()).nodes.length,before);await node('观测值 x').click({button:'right'});await page.getByRole('menuitem',{name:'删除分支'}).click();await waitSaved();assert.equal((await currentGraph()).nodes.length,before-1);await page.getByRole('button',{name:'撤销',exact:true}).click();await waitSaved();assert.equal((await currentGraph()).nodes.length,before);await page.getByRole('button',{name:'重做',exact:true}).click();await waitSaved();assert.equal((await currentGraph()).nodes.length,before-1);await page.getByRole('button',{name:'撤销',exact:true}).click();});
  await check('refresh restoration and JSON import/export fidelity',async()=>{const original=await currentGraph();await page.reload();await page.waitForTimeout(550);assert.equal((await currentGraph()).nodes.length,original.nodes.length);await page.getByRole('button',{name:'导入与导出'}).click();const download=page.waitForEvent('download');await page.getByRole('button',{name:/导出完整知识图/}).click();const d=await download;const dest=path.join(output,'roundtrip.json');await d.saveAs(dest);await page.locator('input[type=file][accept=".json"]').setInputFiles(dest);await page.waitForTimeout(650);const imported=await currentGraph();assert.notEqual(imported.id,original.id);assert.deepEqual(imported.nodes,original.nodes);assert.deepEqual(imported.references,original.references);});
- await check('file upload, sources, separate foundation and requirements',async()=>{await page.getByRole('button',{name:/教材/}).first().click();await page.locator('input[type=file][accept*=".pdf"]').setInputFiles({name:'chapter3.md',mimeType:'text/markdown',buffer:Buffer.from('# Chapter 3\n\n标准差描述分布离散程度。\n\n均值描述分布中心。')});await page.getByText('chapter3.md',{exact:true}).waitFor();await page.getByRole('textbox',{name:'我已经会什么'}).fill('会求均值');await page.getByRole('textbox',{name:'我希望怎样学'}).fill('使用中文和公式');await page.getByRole('button',{name:'关闭窗口'}).click();const g=await currentGraph();assert.equal(g.materials.length,1);assert.equal(g.foundation,'会求均值');assert.ok(!g.materials[0].chunks.some(c=>c.text.includes('使用中文和公式')));});
+ await check('optional materials can be confirmed empty',async()=>{
+  await page.getByRole('button',{name:/教材/}).first().click();
+  await page.getByRole('button',{name:'确认教材',exact:true}).click();
+  await page.getByRole('dialog').waitFor({state:'hidden'});
+  assert.equal((await currentGraph()).materials.length,0);
+ });
+ await check('file upload, sources, separate foundation and requirements',async()=>{await page.getByRole('button',{name:/教材/}).first().click();await page.locator('input[type=file][accept*=".pdf"]').setInputFiles({name:'chapter3.md',mimeType:'text/markdown',buffer:Buffer.from('# Chapter 3\n\n标准差描述分布离散程度。\n\n均值描述分布中心。')});await page.getByText('chapter3.md',{exact:true}).waitFor();await page.getByText('学习范围与偏好（可选）',{exact:true}).click();await page.getByRole('textbox',{name:'我已经会什么'}).fill('会求均值');await page.getByRole('textbox',{name:'我希望怎样学'}).fill('使用中文和公式');await page.getByRole('button',{name:'关闭窗口'}).click();const g=await currentGraph();assert.equal(g.materials.length,1);assert.equal(g.foundation,'会求均值');assert.ok(!g.materials[0].chunks.some(c=>c.text.includes('使用中文和公式')));});
+ await check('batch upload keeps successes, reports failures, and confirms pasted text',async()=>{
+  await page.getByRole('button',{name:/教材/}).first().click();
+  await page.locator('input[type=file][accept*=".pdf"]').setInputFiles([
+   {name:'batch-one.txt',mimeType:'text/plain',buffer:Buffer.from('第一份教材：均值。')},
+   {name:'broken.pdf',mimeType:'application/pdf',buffer:Buffer.from('invalid PDF')},
+   {name:'batch-two.md',mimeType:'text/markdown',buffer:Buffer.from('第二份教材：标准差。')}
+  ]);
+  await page.getByText('batch-two.md',{exact:true}).waitFor();
+  await page.getByRole('alert').getByText(/broken.pdf/).waitFor();
+  await page.getByText('粘贴教材文字（可选）',{exact:true}).click();
+  await page.getByRole('textbox',{name:'教材正文与目录',exact:true}).fill('第三份教材：总体与样本。');
+  await page.getByRole('button',{name:'确认教材',exact:true}).click();
+  await page.getByRole('dialog').waitFor({state:'hidden'});
+  const g=await currentGraph();assert.equal(g.materials.length,4);
+  assert.deepEqual(g.materials.map(m=>m.name),['chapter3.md','batch-one.txt','batch-two.md','粘贴的教材']);
+  await page.reload();await page.getByRole('button',{name:/教材/}).first().click();
+  await page.getByText('batch-one.txt',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'确认教材',exact:true}).click();
+ });
+
  await check('untrusted strings render as text, long text stays compact',async()=>{const g=await currentGraph();g.nodes[0].title='<img src=x onerror=alert(1)>';g.nodes[0].summary='很长的一句话'.repeat(40);g.nodes[0].detail='<script>window.pwned=true</script>\n中文 English $z=\\frac{x-\\mu}{\\sigma}$';await seed(g);await locate('<img');await node('<img').getByRole('button',{name:'查看详情'}).click();assert.equal(await page.locator('.details script').count(),0);assert.equal(await page.locator('.knowledge-node img').count(),0);assert.equal(await page.evaluate(()=>window.pwned),undefined);const box=await node('<img').boundingBox();assert.ok(box.height<350);await page.getByRole('button',{name:'关闭详情'}).click();});
  await check('generation cancellation and repeated clicks deduplicated',async()=>{await api('/settings','PUT',{selected:'openai',provider:{kind:'openai',baseUrl:`http://127.0.0.1:${mock.address().port}/v1`,model:'protocol-test',timeoutMs:3000}});await seed(makeGraph('取消测试','live'));const before=calls;await node('取消测试').dblclick();await page.getByRole('button',{name:'取消生成'}).waitFor();await page.getByRole('button',{name:'取消生成'}).click();await page.waitForTimeout(1200);assert.equal((await currentGraph()).nodes.length,1);assert.ok(calls-before<=1);await node('取消测试').click();await page.waitForTimeout(1300);assert.equal((await currentGraph()).nodes.length,2);});
  await check('deleting a generating node discards late response',async()=>{await locate('测试回答');await node('测试回答').click();await page.getByRole('button',{name:'取消生成'}).waitFor();await node('测试回答').click({button:'right'});await page.getByRole('menuitem',{name:'删除分支'}).click();await page.waitForTimeout(1200);assert.equal((await currentGraph()).nodes.length,1);});
