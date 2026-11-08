@@ -4,7 +4,7 @@
 
 ## 安装与启动
 
-从本项目的 GitHub Releases 下载 `Zhizhi-版本-macos-arm64.pkg`，完成安装后，从“应用程序”打开 **Zhizhi（知枝）**。应用内置 ARM64 Node.js 24.16.0 与生产依赖，不需要另装 Node、npm 或 Homebrew。启动器会打开浏览器中的本地学习界面。
+从本项目的 GitHub Releases 下载 `Zhizhi-版本-macos-arm64.pkg`，完成安装后，从“应用程序”打开 **Zhizhi（知枝）**。应用内置 ARM64 Node.js 24.16.0 与生产依赖，不需要另装 Node、npm 或 Homebrew。1.2.0 起直接打开独立应用窗口，不会启动浏览器。未连接时，右上角有「连接到 Agent」入口。
 
 当前构建默认没有 Apple Developer ID 签名与公证，不能冒称为 Apple 已验证的安装包。macOS 可能要求通过“系统设置 → 隐私与安全性”为这个包单独确认打开；不要关闭 Gatekeeper、SIP 等系统保护。正式免提示分发需要项目所有者提供 Developer ID Application、Developer ID Installer 和公证凭据。
 
@@ -15,7 +15,7 @@
 - Windows DPAPI 密钥不能跨账户/跨系统解密；请在 Mac 重新填写 API Key。知识图可使用 JSON 导入迁移。
 - Codex 与 Claude Code 使用本机官方客户端登录。查找 PATH、`~/.local/bin`、`~/.cargo/bin`、Homebrew 与 Codex 应用内可执行文件；没有安装时不会显示连接成功。
 - 点击设置底部“检查更新”，下载新 pkg；先退出知枝，再安装。安装只替换 `/Applications/Zhizhi.app`，不清理用户数据。
-- 退出知枝时关闭本应用启动的后端与生成请求。关闭浏览器标签页不等同于退出应用；可从 Dock/应用菜单退出。
+- 关闭应用窗口或退出知枝时，同时结束本应用启动的后端与生成请求。
 
 ## 构建
 
@@ -40,7 +40,7 @@ npm test
 
 ## GitHub 更新发布
 
-默认目标为 `mmasondu114/zhizhi`。仓库名若变更，需要同时更新 `server/updates.js`、`package.json`、`platform/macos/Launcher.swift` 和测试中的发布 URL。
+默认目标为 `mmasondu114/zhizhi`。仓库名若变更，需要同时更新 `server/updates.js`、`package.json`、`desktop/main.cjs` 和测试中的发布 URL。
 
 `.github/workflows/macos-release.yml` 在 main 分支提交、版本标签或手动触发时：
 

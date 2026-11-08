@@ -34,6 +34,8 @@ cd "你的项目目录"
 
 如果需要停止后台服务：`powershell -NoProfile -ExecutionPolicy Bypass -File .\Stop.ps1`。启动器仅使用本机回环地址；不会部署公网。默认端口占用时，先检查是否已经运行；也可以在启动前设置 `$env:PORT=4318`。
 
+源码运行独立桌面窗口：先 `npm run build`，设置 `$env:TREE_NODE_PATH=(Get-Command node).Source`，再运行 `npm run desktop`。安装版无需这些步骤。
+
 源码修改后：`npm run build`，停止并重启服务。开发热更新：`node server/index.js --dev`。生产运行：`npm start`。
 
 ## 学习操作
@@ -51,11 +53,11 @@ cd "你的项目目录"
 
 ## 添加模型
 
-右上角 **齿轮 → 本机客户端 → Codex → 连接并使用**，已经登录的客户端不需要填写地址、密钥或模型。若使用 API，选择 **API 接入**，只填服务地址、API Key 和模型名，然后点击 **连接并使用**。模型覆盖、路径和超时放在收起的“高级选项”中。测试是一个实际生成请求，可能消耗提供方额度。切换提供方会取消当前生成请求。
+右上角 **连接到 Agent → 本机客户端 → Codex → 连接并使用**，已经登录的客户端不需要填写地址、密钥或模型。若使用 API，选择 **API 接入**，只填服务地址、API Key 和模型名，然后点击 **连接并使用**。模型覆盖、路径和超时放在收起的“高级选项”中。测试是一个实际生成请求，可能消耗提供方额度。切换提供方会取消当前生成请求。
 
 | 提供方 | 如何填写 | 当前验证情况 |
 |---|---|---|
-| Codex 本地客户端 | 自动检测桌面版与 npm CLI；模型可留空，也可指定；可填写 `.exe` / `.js` 绝对路径 | 本机真实浏览器→后端→已登录 Codex→知识节点完整链路通过，本轮连接测试加真实生成约 43 秒 |
+| Codex 本地客户端 | 自动检测桌面版与 npm CLI；模型可留空，也可指定；可填写 `.exe` / `.js` 绝对路径 | 本机独立应用→后端→已登录 Codex→知识节点完整链路通过；约 72 秒，生成 4 个 AI 子节点，见 MAC_VALIDATION.md |
 | OpenAI-compatible | 填实际 Base URL（通常含 `/v1`）、模型 ID、API Key；本地无密钥服务可以不填 Key | 已做实际 HTTP 协议模拟测试；未使用用户的真实第三方 API 凭据验证 |
 | Anthropic API | 默认 `https://api.anthropic.com/v1`，填写实际模型名和凭据 | 独立 Messages 协议测试通过；未进行付费真实请求 |
 | Claude Code 本地客户端 | 自动检测，或填可执行文件路径；需在官方客户端完成登录 | 本机未发现可用安装；仅完成参数构造、输出协议与进程管理测试 |
@@ -88,6 +90,7 @@ Codex 通过官方 `exec` 非交互模式运行，使用 `--ignore-user-config`�
 ```powershell
 npm test
 npm run test:browser
+npm run test:desktop
 node tests/real-codex.mjs
 node tests/readability.mjs
 node tests/interaction-update.mjs
@@ -111,7 +114,7 @@ React + React Flow + Vite；Node/Express 本地后端；Zod 结构校验；KaTeX
 - 预置模式覆盖 z-score 的常用深入路径。自由问题仅显示明确标注的示例回答，连接模型后才能得到针对性答案。
 - 主布局为树；支持导入引用边并保护被引用节点，但没有额外的“合并两个节点”编辑器。
 - 当前适合一个活动编辑窗口。未实现跨标签页并发编辑冲突合并。撤销历史在当前页面内维护，刷新后数据保留但历史不保留。
-- macOS ARM 包需要在 Mac 上构建，当前未完成实机验证；Linux 暂不提供 API Key 持久保护。
+- macOS ARM 包在 ARM Mac CI 构建和测试；尚未在用户自己的 Mac 上验证模型登录。Linux 暂不提供 API Key 持久保护。
 - 详情安全显示文本与公式；不执行模型给出的 HTML、脚本或代码，也不自动打开来源中的链接。
 
 官方接口依据：[Codex 非交互模式](https://developers.openai.com/codex/noninteractive/)、[Claude Code 程序化调用](https://code.claude.com/docs/en/headless)、[Claude Code CLI](https://code.claude.com/docs/en/cli-reference)、[Anthropic Messages](https://platform.claude.com/docs/en/api/messages/create)。实际兼容能力以本机 `--help` 检查为准。
