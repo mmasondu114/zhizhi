@@ -173,3 +173,17 @@ body:has(.modal-overlay) .toast{top:12px}
 .outline-row,.outline-row.selected,.breadcrumbs,.breadcrumbs button,.detail-summary,.prose,.details h4,.detail-type,.status-picker button,.status-picker .selected{color:#303632}
 .primary,.primary.small,.agent-connect,.agent-connect.is-connected,.outline-rebuild,.prefetch-toggle{color:#303632}
 .knowledge-node.active:is(.type-question,.type-answer,.type-formula,.type-example){color:#303632}
+
+/* Right-button box selection stays in screen coordinates, with a solid menu. */
+.canvas-gesture-host{position:relative}
+.canvas-gesture-host.is-box-selecting,.canvas-gesture-host.is-box-selecting *{cursor:crosshair!important}
+.box-selection-rectangle{position:absolute;pointer-events:none;z-index:8;border:1.5px solid #699b80;background:#91bda526;border-radius:3px}
+.knowledge-node.group-selected,.knowledge-node.group-selected.active,.knowledge-node.highlighted.group-selected{border:1px solid #66967b;outline:1px solid #66967b;outline-offset:0;background:#e5f2eb;box-shadow:none}
+.selection-check{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#67927a;color:#fff;margin-right:4px}
+.selection-menu{position:fixed;z-index:40;width:252px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:auto;background:#fff;border:1px solid #bfd2c6;border-radius:12px;padding:7px;color:#303632;box-shadow:none;outline:none}
+.selection-menu-heading{padding:10px 10px 9px;font-size:13px;font-weight:600;border-bottom:1px solid #e3e9e5;margin-bottom:5px}
+.selection-menu button{display:flex;width:100%;justify-content:flex-start;text-align:left;padding:10px;border-radius:6px;font-size:13px;color:#303632}
+.selection-menu button:hover:not(:disabled),.selection-menu button:focus-visible{background:#e8f3ed;outline:none}
+.selection-menu button>span{margin-left:auto;font-size:11px;color:#707971}
+.selection-menu button.selection-delete{color:#a62f3b}.selection-menu hr{margin:5px 4px;border-color:#e3e9e5}
+.selection-menu-note{padding:3px 10px 6px;font-size:11px;line-height:1.5;color:#626c65}
