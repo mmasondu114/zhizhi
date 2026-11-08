@@ -15,6 +15,7 @@ export default function SettingsForm({settings,clients,onSave,notify,refreshClie
  </div>
  {cli?<><div className="client-choices">{[['codex','Codex'],['claude','Claude Code']].map(([k,label])=><button type="button" key={k} disabled={working} className={kind===k?'selected':''} onClick={()=>choose(k)}>{label}<small>{clients[k]?.installed?'已检测到客户端':clients[k]?.status||'检测中…'}</small></button>)}</div>
  <div className="connect-explainer"><strong>已在客户端登录？直接连接。</strong><p>不用填写 API Key、地址或模型名。使用客户端当前的登录和默认模型。</p><button type="button" className="text-btn" onClick={()=>refreshClients().catch(e=>notify(e.message))}>重新检测</button></div>
+ {kind==='codex'&&<label className="checkline"><input type="checkbox" checked={values.webSearch!==false} disabled={working} onChange={e=>change('webSearch',e.target.checked)}/>允许联网核对大纲、知识点和例题</label>}
  {clients[kind]?.installed===false&&<p className="connection-result">{clients[kind].status}。请安装并登录客户端，或改用 API 接入。</p>}</>:
  kind==='demo'?<div className="connect-explainer"><strong>不连接，也可以先体验</strong><p>展开 z-score 预置知识树和示例问答。自由生成其他内容需要连接模型。</p></div>:
  <><label>接口类型<select aria-label="接口类型" disabled={working} value={kind} onChange={e=>choose(e.target.value)}><option value="openai">OpenAI 兼容（含本地服务）</option><option value="anthropic">Anthropic</option></select></label>
@@ -25,11 +26,12 @@ export default function SettingsForm({settings,clients,onSave,notify,refreshClie
  {cli&&<><label>模型名称（留空使用客户端默认值）<input disabled={working} value={values.model||''} onChange={e=>change('model',e.target.value)}/></label><label>可执行文件路径（自动检测，可留空）<input disabled={working} value={values.clientPath||''} onChange={e=>change('clientPath',e.target.value)}/></label><p className="muted">{clients[kind]?.version} · {clients[kind]?.status||'检测中'}</p></>}
  <label>请求超时（秒）<input type="number" min="1" max="600" disabled={working} value={(values.timeoutMs||120000)/1000} onChange={e=>change('timeoutMs',Number(e.target.value)*1000)}/></label>
  {!cli&&<label className="checkline"><input type="checkbox" disabled={working} checked={!!values.clearKey} onChange={e=>change('clearKey',e.target.checked)}/>清除已保存密钥</label>}
- <p className="muted">{cli?'复用官方登录，不读取私有凭据。客户端工具能力已受限；订阅不等于第三方 API 额度。':'密钥仅保存在本机后端，不进入知识图导出。'}</p>
+ <p className="muted">{cli?'复用官方登录，不读取私有凭据。可按设置联网检索学习资料；订阅不等于第三方 API 额度。':'密钥仅保存在本机后端，不进入知识图导出。'}</p>
  <button type="button" className="secondary" disabled={working} onClick={async()=>{try{await save();change('key','');setResult('配置已保存，尚未测试连接');}catch(e){notify(e.message);}}}>仅保存配置</button></details>}
  {result&&<div className="connection-result" role="status">{result}</div>}
  <button className="primary full connect-primary" disabled={working||(cli&&clients[kind]?.installed===false&&!values.clientPath)} type="submit">{working?'正在连接…':kind==='demo'?'使用离线示例':'连接并使用'}</button>
- <p className="connection-privacy">只在你展开节点或提问时发送相关学习内容。</p>
+ <p className="connection-privacy">展开、提问、练习及已开启的预生成会发送相关学习内容。</p>
  <UpdatePanel api={api}/>
  </form>;
 }
+

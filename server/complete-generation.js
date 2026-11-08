@@ -36,7 +36,7 @@ export function mergeKnowledge(nodes){
 export async function generateComplete(config,graph,node,{signal,onProgress=()=>{},provider=callProvider,cache,concurrency}={}){
  const stop=new AbortController();signal=signal?AbortSignal.any([signal,stop.signal]):stop.signal;
  let reused=0;
- const invoke=async(context,onProgress)=>{signal.throwIfAborted();const run=()=>retryRateLimited(()=>provider(config,context,{signal,onProgress,timeoutMs:context.generationTask?Math.max(config.timeoutMs||180000,300000):undefined}),{signal,onWait:onProgress});if(!cache)return run();const result=await cache.run(config,context,run);signal.throwIfAborted();if(result.cached)reused++;return result.nodes;};
+ const invoke=async(context,onProgress)=>{signal.throwIfAborted();const run=()=>retryRateLimited(()=>provider(config,context,{signal,onProgress,timeoutMs:context.generationTask?Math.max(config.timeoutMs||180000,context.generationTask==='core-synthesis'?600000:300000):undefined}),{signal,onWait:onProgress});if(!cache)return run();const result=await cache.run(config,context,run);signal.throwIfAborted();if(result.cached)reused++;return result.nodes;};
  const base={goal:graph.goal,foundation:graph.foundation,instructions:graph.instructions,scope:graph.scope,path:ancestors(graph,node.id).slice(-12).map(n=>({title:n.title,summary:n.summary,type:n.type})),current:{title:node.title,summary:node.summary,type:node.type,detail:node.detail},question:node.type==='question'?node.title:null};
  const exhaustive=graph.materials.length>0&&(node.id===graph.root||node.materialIds?.length);
  if(!exhaustive){
@@ -49,7 +49,7 @@ export async function generateComplete(config,graph,node,{signal,onProgress=()=>
  }
  const materials=node.id===graph.root?graph.materials:graph.materials.filter(m=>node.materialIds.includes(m.id));
  if(!materials.length)throw new Error('该章节的教材已移除，请重新梳理教材');
- const batches=materialBatches(materials),total=batches.length*2+2;let completed=0;
+ const batches=materialBatches(materials),total=batches.length*2+3;let completed=0;
  const status=(stage,extra={})=>onProgress({stage,percent:Math.floor(completed/total*100),completed,total,reused,...extra});
  status('planning');signal?.throwIfAborted();completed++;status('reading');
  const inventories=new Map(materials.map(m=>[m.id,[]]));
@@ -87,15 +87,14 @@ export async function generateComplete(config,graph,node,{signal,onProgress=()=>
  if(failure)throw failure;
  for(let i=0;i<batches.length;i++)inventories.get(batches[i].material.id).push(...results[i]);
  signal?.throwIfAborted();status('assembling');
- const nodes=[];let concepts=0;
- for(const material of [...materials].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}))){
-  const outline=mergeKnowledge(inventories.get(material.id));concepts+=outline.length;
-  if(outline.length>1000)throw new Error('单份资料的知识点超过 1000 个，请按章节拆分资料');
-  if(node.id!==graph.root){nodes.push(...outline);continue;}
-  const pages=new Set(material.chunks.map(c=>c.page).filter(Boolean)).size;
-  nodes.push({title:material.name.replace(/^\[[^\]]+\]\s*/,'').replace(/\.\w+$/,'').slice(0,100),summary:`${outline.length} 个独立知识点 · ${pages?pages+' 页':'全文'}已逐段梳理并复核，点击展开完整清单。`,detail:`资料：${material.name}\n已处理全部 ${material.chunks.length} 段可提取正文，并逐批检查遗漏。每个定义、条件、公式、步骤和独立例题分别列为知识点；不会把多个主题压成少数概括。模型复核仍可能有遗漏，请结合原文核对。`,type:'knowledge',relation:'组成',formula:'',example:'',sources:material.chunks.slice(0,8).map(c=>c.id),materialIds:[material.id],outline});
- }
- if(graph.nodes.length+nodes.length+concepts>5000)throw new Error('完整知识点超过当前图容量，请按章节分别建立知识图；未截断教材内容');
- const coverage={files:materials.length,chunks:scannedChunks,batches:batches.length,reviewedBatches:batches.length,auditPasses,concepts};
+ const candidates=mergeKnowledge([...inventories.values()].flat()).filter(n=>n.type!=='example'&&n.relation!=='举例');
+ if(!candidates.length)throw new Error('未提炼到核心概念，请检查教材正文后重试');
+ const nodes=(await invoke({...base,generationTask:'core-synthesis',materials:[],allowedSourceIds:materials.flatMap(m=>m.chunks.map(c=>c.id)),candidates},p=>status('assembling',{providerStage:p.stage,characters:p.characters,bytes:p.bytes}))).filter(n=>n.type!=='example'&&n.relation!=='举例').map(n=>({...n,example:''}));
+ signal.throwIfAborted();if(!nodes.length)throw new Error('核心知识点整理为空，请重试');
+ if(nodes.some(n=>!n.sources.length))throw new Error('核心概念缺少教材依据，请重试');
+ completed++;status('validating');
+ if(graph.nodes.length+nodes.length>5000)throw new Error('知识点超过当前图容量，请分图整理');
+ const concepts=nodes.length;
+ const coverage={files:materials.length,chunks:scannedChunks,batches:batches.length,reviewedBatches:batches.length,auditPasses,concepts,coreConcepts:true};
  completed=total;status('complete',{coverage});return {nodes,coverage};
 }

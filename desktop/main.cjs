@@ -23,6 +23,7 @@ function diagnostic(event,detail={}){require('node:fs').mkdirSync(dataRoot,{recu
 process.on('uncaughtExceptionMonitor',error=>diagnostic('main-exception',{message:error.message,stack:error.stack}));
 app.on('child-process-gone',(_event,details)=>diagnostic('child-process-gone',details));
 const externalAllowed=url=>{try{const u=new URL(url);return u.protocol==='https:'&&u.hostname==='github.com'&&u.pathname.startsWith('/mmasondu114/zhizhi/releases');}catch{return false;}};
+async function openLearningLink(url){try{const parsed=new URL(url);if(parsed.protocol==='https:'&&!parsed.username&&!parsed.password&&!smoke)await shell.openExternal(url);}catch{}}
 async function openRelease(url){if(externalAllowed(url)&&!smoke)await shell.openExternal(url);}
 async function health(){try{return await fetch(origin+'/api/health',{signal:AbortSignal.timeout(500)}).then(r=>r.ok?r.json():null);}catch{return null;}}
 async function startBackend(){
@@ -56,7 +57,7 @@ async function createWindow(){
  wc.session.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));
  wc.session.setPermissionCheckHandler(()=>false);
  wc.setWindowOpenHandler(({url})=>{openRelease(url).catch(()=>{});return {action:'deny'};});
- wc.on('will-navigate',(event,url)=>{if(new URL(url).origin!==origin){event.preventDefault();openRelease(url).catch(()=>{});}});
+ wc.on('will-navigate',(event,url)=>{if(new URL(url).origin!==origin){event.preventDefault();openLearningLink(url).catch(()=>{});}});
  wc.on('will-attach-webview',event=>event.preventDefault());
  wc.session.on('will-download',async(event,item)=>{const url=item.getURL();if(!url.startsWith('blob:'+origin+'/')&&!url.startsWith(origin+'/')){event.preventDefault();return;}if(smoke){event.preventDefault();return;}item.setSaveDialogOptions({title:'导出知识图',defaultPath:item.getFilename()});});
  Menu.setApplicationMenu(Menu.buildFromTemplate([
