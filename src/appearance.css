@@ -196,3 +196,13 @@ body:has(.modal-overlay) .toast{top:12px}
 @media(max-width:600px){.exercise-header{padding:12px 14px}.exercise-paper{padding:28px 20px 60px}.exercise-paper h1{font-size:25px}.exercise-question{font-size:16px}}
 
 .exercise-option input[type="radio"]{width:16px;height:16px;min-width:16px;flex:0 0 16px;margin:0;padding:0;border-radius:50%;box-shadow:none}.exercise-option>.prose{flex:1;min-width:0}.exercise-option{box-sizing:border-box;width:100%}
+
+/* Short, interruptible disclosure motion; no blur or glow. */
+.detail-presence{--detail-width:382px;width:var(--detail-width);min-width:0;flex-shrink:0;display:flex;overflow:hidden;animation:detail-open .22s cubic-bezier(.22,1,.36,1) both}
+.detail-presence .details{width:var(--detail-width);min-width:var(--detail-width);flex-shrink:0}
+.detail-presence.is-closing{pointer-events:none;animation:detail-close .18s ease-in both}
+@keyframes detail-open{from{width:0;opacity:0;transform:translateX(14px)}to{width:var(--detail-width);opacity:1;transform:translateX(0)}}
+@keyframes detail-close{from{width:var(--detail-width);opacity:1;transform:translateX(0)}to{width:0;opacity:0;transform:translateX(14px)}}
+@media(max-width:1100px){.detail-presence{--detail-width:340px}}
+@media(max-width:760px){.detail-presence{--detail-width:min(382px,96vw);position:absolute;right:0;top:62px;bottom:0;z-index:8}.detail-presence .details{position:static}}
+@media(prefers-reduced-motion:reduce){.detail-presence{animation:none!important}}

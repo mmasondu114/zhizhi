@@ -26,10 +26,21 @@ try{
  await name.fill('完整教材 已确认');assert.equal(await page.evaluate(()=>window.zhizhiFlush()),true);assert.equal((await api('/graphs/'+g.id)).name,'完整教材 已确认');await page.getByRole('button',{name:'关闭窗口'}).click();
 
  saved=await api('/graphs/'+g.id);const file=saved.nodes.find(n=>n.materialIds?.[0]==='m0');
- await page.getByRole('button',{name:file.title,exact:true}).click();await page.locator('.react-flow__node[data-id="'+file.id+'"] .knowledge-node').click();
+ await page.locator('.outline').getByRole('button',{name:file.title,exact:true}).click();await page.locator('.react-flow__node[data-id="'+file.id+'"] .knowledge-node').click();
  await page.getByRole('button',{name:'已保存在本机',exact:true}).waitFor();saved=await api('/graphs/'+g.id);const topic=saved.nodes.find(n=>n.parent===file.id);assert.ok(topic.prepared&&topic.outline.length);assert.equal(calls,27);
- await page.getByRole('button',{name:topic.title,exact:true}).click();await page.locator('.react-flow__node[data-id="'+topic.id+'"] .knowledge-node').click();
+ await page.locator('.outline').getByRole('button',{name:topic.title,exact:true}).click();await page.locator('.react-flow__node[data-id="'+topic.id+'"] .knowledge-node').click();
  await page.getByRole('button',{name:'已保存在本机',exact:true}).waitFor();saved=await api('/graphs/'+g.id);const leaf=saved.nodes.find(n=>n.parent===topic.id);assert.ok(leaf.prepared);assert.equal(calls,27);
- await page.getByRole('button',{name:leaf.title,exact:true}).click();await page.locator('.react-flow__node[data-id="'+leaf.id+'"] .knowledge-node').click();await page.waitForTimeout(800);assert.equal(calls,27,'prepared concepts must open without more model calls');
+ await page.locator('.outline').getByRole('button',{name:leaf.title,exact:true}).click();await page.locator('.react-flow__node[data-id="'+leaf.id+'"] .knowledge-node').click();await page.waitForTimeout(800);assert.equal(calls,27,'prepared concepts must open without more model calls');
+
+ await page.locator('.detail-presence.is-open .details').waitFor();
+ await page.locator('.react-flow__node[data-id="'+leaf.id+'"] .knowledge-node').click();await page.locator('.detail-presence').waitFor({state:'detached'});assert.equal(calls,27,'principle/detail toggle must not generate');
+ await page.locator('.outline').getByRole('button',{name:file.title,exact:true}).click();
+ await page.evaluate(()=>{window.motionSamples=[];window.motionObserver=new MutationObserver(()=>{for(const n of document.querySelectorAll('.branch-exiting'))window.motionSamples.push(Number(n.style.opacity));});window.motionObserver.observe(document.querySelector('.react-flow'),{subtree:true,childList:true,attributes:true,attributeFilter:['style']});});
+ const storedCount=(await api('/graphs/'+g.id)).nodes.length;
+ await page.locator('.react-flow__node[data-id="'+file.id+'"] .knowledge-node').click();await page.waitForTimeout(350);
+ assert.ok((await page.evaluate(()=>window.motionSamples)).some(x=>x>0&&x<1),'collapse must include visible intermediate opacity');assert.equal(await page.locator('.branch-exiting').count(),0);
+ await page.evaluate(()=>window.zhizhiFlush());saved=await api('/graphs/'+g.id);assert.equal(saved.nodes.find(n=>n.id===file.id).collapsed,true);assert.equal(saved.nodes.length,storedCount);
+ await page.locator('.react-flow__node[data-id="'+file.id+'"] .knowledge-node').click();await page.waitForTimeout(350);await page.evaluate(()=>window.zhizhiFlush());assert.equal((await api('/graphs/'+g.id)).nodes.find(n=>n.id===file.id).collapsed,false);assert.equal(calls,27);
+ await page.emulateMedia({reducedMotion:'reduce'});await page.locator('.react-flow__node[data-id="'+file.id+'"] .knowledge-node').click();assert.equal(await page.locator('.branch-exiting').count(),0);await page.locator('.react-flow__node[data-id="'+file.id+'"] .knowledge-node').click();await page.emulateMedia({reducedMotion:'no-preference'});
  await page.getByRole('button',{name:'回到根节点'}).click();await page.waitForTimeout(500);await page.screenshot({path:path.join(root,'test-results/adaptive-complete.png')});assert.deepEqual(errors,[]);console.log('PASS adaptive full text, no header branding, measured 0–100%, all nine files, synthesized core concepts, no pan saves, debounced edits and close flush');
 }catch(error){await page.screenshot({path:path.join(root,'test-results/completeness-failure.png')}).catch(()=>{});console.log(await page.locator('body').innerText());throw error;}finally{await browser.close();app.locals.shutdown();server.closeAllConnections();mock.closeAllConnections();await Promise.all([new Promise(r=>server.close(r)),new Promise(r=>mock.close(r))]);await fs.rm(dataDir,{recursive:true,force:true});}
