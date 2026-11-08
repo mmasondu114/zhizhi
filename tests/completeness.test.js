@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {materialBatches,generateComplete} from '../server/complete-generation.js';
+import {makeGraph} from '../src/demo.js';
+import {nodeHeight,layout,resolveDrop} from '../shared/tree.js';
+import {validateGraph,parseGeneration} from '../shared/protocol.js';
+const note=(title,id)=>({title,summary:'单独讲清这个知识点',detail:'定义、条件和用法。',type:'knowledge',relation:'组成',sources:[id],formula:'',example:''});
+function fixture(){const g=makeGraph('AP Statistics Chapter 3','live');g.materials=Array.from({length:9},(_,i)=>({id:'m'+i,name:i===8?'Table C.pdf':`3${String.fromCharCode(65+i)}.pdf`,chunks:Array.from({length:5},(_,j)=>({id:`m${i}-${j}`,page:j+1,paragraph:1,text:`文档 ${i} 第 ${j} 页。`+'知识正文。'.repeat(300)}))}));return g;}
+test('every chunk of all nine PDFs is read; each file remains a separate section; audit omissions added',async()=>{
+ const g=fixture(),seen=new Set(),events=[];let calls=0;const rounds=new Map();
+ const provider=async(config,context)=>{calls++;if(context.generationTask==='inventory'){context.materials.forEach(c=>seen.add(c.id));return context.materials.map(c=>note('知识点 '+c.id,c.id));}const id=context.materials[0].id,round=rounds.get(id)||0;rounds.set(id,round+1);return round===0?[note('遗漏条件 '+id,id)]:[];};
+ const result=await generateComplete({},g,g.nodes[0],{provider,onProgress:e=>events.push(e)});
+ assert.equal(seen.size,45);assert.equal(result.nodes.length,9);assert.equal(result.coverage.chunks,45);assert.equal(result.coverage.concepts,54);assert.equal(result.coverage.auditPasses,18);assert.equal(calls,27);
+ assert.ok(result.nodes.every(n=>n.outline.length===6));assert.equal(events[0].percent,0);assert.equal(events.at(-1).percent,100);assert.ok(events.every((e,i)=>i===0||e.percent>=events[i-1].percent));assert.ok(events.slice(0,-1).every(e=>e.percent<100));
+ const saved={...g,nodes:[...g.nodes,...result.nodes.map((n,i)=>({...n,id:'n'+i,parent:g.root,status:'unlearned',collapsed:false,expanded:false,position:{x:i*400,y:400},origin:'material'}))]};assert.equal(validateGraph(saved).nodes[1].outline.length,6);
+});
+test('batch partition does not lose late pages and respects input bound',()=>{const g=fixture(),batches=materialBatches(g.materials,3500);assert.equal(batches.flatMap(b=>b.chunks).length,45);assert.equal(new Set(batches.flatMap(b=>b.chunks.map(c=>c.id))).size,45);assert.ok(batches.every(b=>b.chunks.reduce((n,c)=>n+c.text.length,0)<=3500));});
+test('audit failure/cancellation never emits 100 or returns partial sections',async()=>{const g=fixture(),events=[];await assert.rejects(generateComplete({},g,g.nodes[0],{provider:async(_,c)=>{if(c.generationTask==='inventory')return [note('定义',c.materials[0].id)];throw Error('复核失败');},onProgress:e=>events.push(e)}),/复核失败/);assert.ok(events.every(e=>e.percent<100));const ctrl=new AbortController();let calls=0;await assert.rejects(generateComplete({},g,g.nodes[0],{signal:ctrl.signal,provider:async(_,c)=>{calls++;ctrl.abort();return [note('定义',c.materials[0].id)];}}));assert.equal(calls,1);});
+test('output is no longer capped at six and audits may explicitly report no omissions',()=>{assert.equal(parseGeneration(JSON.stringify({nodes:Array.from({length:18},(_,i)=>note('点'+i,'s'))}),['s']).length,18);assert.deepEqual(parseGeneration('{"nodes":[]}',[],{allowEmpty:true}),[]);assert.throws(()=>parseGeneration('{"nodes":[]}'));});
+test('variable heights leave enough room for children and drag collision',()=>{const g=makeGraph('root','live');g.nodes[0].layoutHeight=700;g.nodes.push({...g.nodes[0],id:'child',parent:g.root,title:'child',layoutHeight:180,position:{x:0,y:0}});const arranged=layout(g);assert.ok(arranged.nodes[1].position.y>=arranged.nodes[0].position.y+800);assert.ok(nodeHeight({title:'长标题'.repeat(20),summary:'长要点'.repeat(50)})>nodeHeight({title:'短',summary:'短'}));const drop=resolveDrop(arranged,'child',{x:arranged.nodes[0].position.x,y:arranged.nodes[0].position.y+300});assert.ok(drop.x!==arranged.nodes[0].position.x||drop.y>=arranged.nodes[0].position.y+748||drop.y<=arranged.nodes[0].position.y-228);});

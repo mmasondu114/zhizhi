@@ -1,3 +1,4 @@
+import {generateComplete} from './complete-generation.js';
 import express from 'express';
 import {defaultDataDir} from './platform.js';
 import {APP_ID,APP_VERSION,RELEASES_URL,checkForUpdates} from './updates.js';
@@ -44,14 +45,14 @@ export async function createApp({dataDir=defaultDataDir({root}),port=Number(proc
  app.post('/api/generate',async(req,res)=>{
   const body=z.object({requestId:z.string().uuid(),graph:z.unknown(),nodeId:z.string(),provider:z.enum(['openai','anthropic','codex','claude'])}).parse(req.body);const graph=validateGraph(body.graph);const node=graph.nodes.find(n=>n.id===body.nodeId);if(!node)throw new Error('节点已删除');
   const key=graph.id+':'+node.id;if(requests.has(key))return res.status(409).json({error:'该分支正在生成'});if(body.provider!==settings.selected)return res.status(409).json({error:'模型已切换，请重试'});
-  const pathNodes=ancestors(graph,node.id);const fragments=relevantChunks(graph,node,pathNodes);
+  
   const controller=new AbortController(),epoch=configEpoch;requests.set(key,controller);res.on('close',()=>controller.abort());
-  const streaming=(req.headers.accept||'').includes('application/x-ndjson'),started=Date.now();let lastProgress={stage:'preparing'},lastSent=0;
+  const streaming=(req.headers.accept||'').includes('application/x-ndjson'),started=Date.now();let lastProgress={stage:'preparing',percent:0},lastSent=0;
   const send=value=>{if(!res.destroyed&&!res.writableEnded)res.write(JSON.stringify(value)+'\n');};
   const progress=(value,heartbeat=false)=>{lastProgress={...lastProgress,...value};if(streaming&&(heartbeat||Date.now()-lastSent>100||value.stage!=='receiving')){lastSent=Date.now();send({type:'progress',...lastProgress,elapsedMs:Date.now()-started});}};
   if(streaming){res.setHeader('Content-Type','application/x-ndjson');res.setHeader('X-Accel-Buffering','no');res.flushHeaders();progress(lastProgress);}
   const heartbeat=streaming?setInterval(()=>progress(lastProgress,true),1000):null;
-  try{const p=settings.providers[body.provider];const nodes=await callProvider({...p,key:await unprotect(p.secret)},{goal:graph.goal,foundation:graph.foundation,instructions:graph.instructions,scope:graph.scope,path:pathNodes.slice(-12).map(n=>({title:n.title,summary:n.summary,type:n.type})),current:{title:node.title,summary:node.summary,type:node.type,detail:node.detail},question:node.type==='question'?node.title:null,materials:fragments},{signal:controller.signal,onProgress:streaming?progress:undefined});if(!controller.signal.aborted&&epoch===configEpoch){connected(body.provider);const result={requestId:body.requestId,graphId:graph.id,parentId:node.id,nodes,connection};if(streaming){send({type:'result',...result});res.end();}else res.json(result);}}catch(error){if(epoch===configEpoch&&!controller.signal.aborted)connection={kind:body.provider,status:'error',message:error.message};if(streaming){if(!controller.signal.aborted)send({type:'error',error:error.message});res.end();}else throw error;}finally{clearInterval(heartbeat);if(requests.get(key)===controller)requests.delete(key);}
+  try{const p=settings.providers[body.provider];const {nodes,coverage}=await generateComplete({...p,key:await unprotect(p.secret)},graph,node,{signal:controller.signal,onProgress:streaming?progress:undefined});if(!controller.signal.aborted&&epoch===configEpoch){connected(body.provider);const result={requestId:body.requestId,graphId:graph.id,parentId:node.id,nodes,coverage,connection};if(streaming){send({type:'result',...result});res.end();}else res.json(result);}}catch(error){if(epoch===configEpoch&&!controller.signal.aborted)connection={kind:body.provider,status:'error',message:error.message};if(streaming){if(!controller.signal.aborted)send({type:'error',error:error.message});res.end();}else throw error;}finally{clearInterval(heartbeat);if(requests.get(key)===controller)requests.delete(key);}
  });
  if(dev){const {createServer}=await import('vite');const vite=await createServer({root,server:{middlewareMode:true},appType:'spa'});app.use(vite.middlewares);}else{app.use(express.static(path.join(root,'dist')));app.get('/{*path}',(req,res)=>res.sendFile(path.join(root,'dist/index.html')));}
  app.use((err,req,res,next)=>{if(res.headersSent)return next(err);const error=err instanceof z.ZodError?'数据格式不正确，未覆盖原有内容':err.message||'服务异常';res.status(err.code==='LIMIT_FILE_SIZE'?413:400).json({error});});

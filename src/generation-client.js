@@ -9,7 +9,7 @@ export async function requestGeneration(graph,nodeId,provider,{signal,onProgress
  else{
   const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',size=0;
   const line=text=>{if(!text.trim())return;const event=JSON.parse(text);if(event.type==='error')throw new Error(event.error);if(event.type==='progress')onProgress?.(event);if(event.type==='result')result=event;};
-  try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>2000000)throw new Error('响应过长');buffer+=decoder.decode(value,{stream:true});let i;while((i=buffer.indexOf('\n'))>=0){line(buffer.slice(0,i));buffer=buffer.slice(i+1);}}buffer+=decoder.decode();line(buffer);}finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
+  try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>25000000)throw new Error('响应过长');buffer+=decoder.decode(value,{stream:true});let i;while((i=buffer.indexOf('\n'))>=0){line(buffer.slice(0,i));buffer=buffer.slice(i+1);}}buffer+=decoder.decode();line(buffer);}finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
  }
  if(!result||result.requestId!==requestId||result.graphId!==graph.id||result.parentId!==nodeId||!Array.isArray(result.nodes))throw new Error('响应与当前分支不匹配或中途断开，已丢弃');
  return result;
@@ -33,7 +33,7 @@ export class GenerationQueue{
  async request(graph,id,provider,{signal,onProgress,force=false}={}){
   signal?.throwIfAborted();this.configure(graph,provider);const key=this.key(graph,id);this.emit();
   if(force){this.cache.delete(key);this.jobs.get(key)?.controller.abort();this.jobs.delete(key);}
-  const cached=this.cache.get(key);if(cached){this.cache.delete(key);cached.ready=false;this.cache.set(key,cached);this.emit();onProgress?.({stage:'cached',elapsedMs:0});return cached.result;}
+  const cached=this.cache.get(key);if(cached){this.cache.delete(key);cached.ready=false;this.cache.set(key,cached);this.emit();onProgress?.({stage:'cached',percent:100,elapsedMs:0});return cached.result;}
   this.foreground++;clearTimeout(this.timer);this.queue=this.queue.filter(x=>x.key!==key);
   let job=this.jobs.get(key);
   for(const other of this.jobs.values())if(other!==job&&other.background)other.controller.abort();
@@ -45,7 +45,7 @@ export class GenerationQueue{
  schedule(graph,nodes,provider){
   if(!this.enabled||provider==='demo')return;this.configure(graph,provider);
   // Replace stale predictions with the next visible choices. Never recurse automatically.
-  this.queue=nodes.filter(n=>n.type!=='question'&&!n.expanded).slice(0,6).map(n=>({graph,id:n.id,provider,key:this.key(graph,n.id)})).filter(x=>!this.cache.has(x.key)&&!this.jobs.has(x.key));this.emit();this.pump();
+  this.queue=nodes.filter(n=>n.type!=='question'&&!n.expanded&&!n.outline?.length).slice(0,6).map(n=>({graph,id:n.id,provider,key:this.key(graph,n.id)})).filter(x=>!this.cache.has(x.key)&&!this.jobs.has(x.key));this.emit();this.pump();
  }
  pump(){
   clearTimeout(this.timer);if(!this.enabled||this.foreground||this.jobs.size||!this.queue.length)return;

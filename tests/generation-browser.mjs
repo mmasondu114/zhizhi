@@ -19,7 +19,7 @@ const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||(pr
 const page=await browser.newPage({viewport:{width:1440,height:950}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
 try{
  await page.goto(base);await page.locator('.knowledge-node h3').first().waitFor();await page.waitForTimeout(500);await page.locator('.knowledge-node h3').first().click();
- await page.getByRole('progressbar',{name:'生成进度'}).waitFor();await page.waitForFunction(()=>document.querySelector('.node-footer')?.textContent.includes('20 字符'));
+ await page.getByRole('progressbar',{name:'生成进度'}).waitFor();await page.waitForFunction(()=>document.querySelector('[role=progressbar]')?.getAttribute('aria-valuenow')==='33');
  await page.waitForFunction(()=>document.querySelector('.node-footer')?.textContent.includes('1秒'));
  await page.waitForFunction(()=>document.querySelector('.prefetch-toggle')?.textContent.includes('2 层已就绪'),null,{timeout:15000});
  assert.equal(calls,3);assert.equal(maxActive,1);

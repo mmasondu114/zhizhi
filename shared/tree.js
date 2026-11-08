@@ -1,4 +1,9 @@
 export const NODE_WIDTH=320, NODE_HEIGHT=244, LEVEL_GAP=344, SIBLING_GAP=48;
+export function nodeHeight(node){
+ if(node.layoutHeight)return node.layoutHeight;
+ const lines=(text,capacity)=>String(text||'').split('\n').reduce((sum,line)=>sum+Math.max(1,Math.ceil([...line].reduce((n,c)=>n+(c.charCodeAt(0)>255?1:.55),0)/capacity)),0);
+ return 104+lines(node.title,15)*25+lines(node.summary,18)*22+(node.formula?40:0);
+}
 export const uid=()=>globalThis.crypto.randomUUID();
 export function children(g,id){return g.nodes.filter(n=>n.parent===id);}
 export function ancestors(g,id){const map=new Map(g.nodes.map(n=>[n.id,n])),r=[];let n=map.get(id);while(n){r.unshift(n);n=map.get(n.parent);}return r;}
@@ -19,8 +24,11 @@ export function layout(g,anchor){
   kids.forEach((c,i)=>offsets.set(c,placed[i]-center));
   shapes.set(id,{left:[-NODE_WIDTH/2,...left.map(x=>x-center)],right:[NODE_WIDTH/2,...right.map(x=>x-center)]});
  }
+ const levels=new Map(),heights=[],scan=[[g.root,0]];
+ while(scan.length){const [id,depth]=scan.pop();levels.set(id,depth);heights[depth]=Math.max(heights[depth]||0,nodeHeight(byId.get(id)));for(const c of cs.get(id)||[])scan.push([c,depth+1]);}
+ const rows=[0];for(let d=1;d<heights.length;d++)rows[d]=rows[d-1]+heights[d-1]+100;
  const positions=new Map(),todo=[[g.root,0,0]];
- while(todo.length){const [id,x,depth]=todo.pop();positions.set(id,{x:x-NODE_WIDTH/2,y:depth*LEVEL_GAP});for(const c of cs.get(id)||[])todo.push([c,x+offsets.get(c),depth+1]);}
+ while(todo.length){const [id,x,depth]=todo.pop();positions.set(id,{x:x-NODE_WIDTH/2,y:rows[depth]});for(const c of cs.get(id)||[])todo.push([c,x+offsets.get(c),depth+1]);}
  const target=byId.get(anchor||g.root);const after=positions.get(target?.id);const dx=target&&after?target.position.x-after.x:0,dy=target&&after?target.position.y-after.y:0;
  return {...g,nodes:g.nodes.map(n=>positions.has(n.id)?{...n,position:{x:positions.get(n.id).x+dx,y:positions.get(n.id).y+dy}}:n)};
 }
@@ -38,16 +46,17 @@ export function markdown(g){const lines=[`# ${g.name}`,'',`学习目标：${g.go
 export function readableLayout(g){
  const nodes=visibleNodes(g).sort((a,b)=>a.position.x-b.position.x);
  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length&&nodes[j].position.x-nodes[i].position.x<NODE_WIDTH+16;j++)
-  if(Math.abs(nodes[j].position.y-nodes[i].position.y)<NODE_HEIGHT+44)return layout(g,g.root);
+  if(nodes[j].position.y<nodes[i].position.y+nodeHeight(nodes[i])+44&&nodes[i].position.y<nodes[j].position.y+nodeHeight(nodes[j])+44)return layout(g,g.root);
  return g;
 }
 
 export function resolveDrop(g,id,position){
- const other=visibleNodes(g).filter(n=>n.id!==id),original=g.nodes.find(n=>n.id===id)?.position||position;
- const dx=NODE_WIDTH+20,dy=NODE_HEIGHT+48;
- const conflicts=p=>other.filter(n=>Math.abs(n.position.x-p.x)<dx&&Math.abs(n.position.y-p.y)<dy);
+ const moving=g.nodes.find(n=>n.id===id),other=visibleNodes(g).filter(n=>n.id!==id),original=moving?.position||position;
+ const dx=NODE_WIDTH+20,dy=nodeHeight(moving)+48;
+ const conflicts=p=>other.filter(n=>Math.abs(n.position.x-p.x)<dx&&n.position.y<p.y+dy&&p.y<n.position.y+nodeHeight(n)+48);
  const hit=conflicts(position);if(!hit.length)return position;
- const candidates=[original];for(const n of hit)candidates.push({x:n.position.x-dx,y:position.y},{x:n.position.x+dx,y:position.y},{x:position.x,y:n.position.y-dy},{x:position.x,y:n.position.y+dy});
+ const candidates=[original];for(const n of hit)candidates.push({x:n.position.x-dx,y:position.y},{x:n.position.x+dx,y:position.y},{x:position.x,y:n.position.y-dy},{x:position.x,y:n.position.y+nodeHeight(n)+48});
  candidates.sort((a,b)=>Math.hypot(a.x-position.x,a.y-position.y)-Math.hypot(b.x-position.x,b.y-position.y));
  return candidates.find(p=>!conflicts(p).length)||original;
 }
+

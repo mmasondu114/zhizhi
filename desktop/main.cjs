@@ -31,6 +31,7 @@ async function stopBackend(){
 }
 async function createWindow(){
  window=new BrowserWindow({title:'知枝',icon:path.join(root,'dist','app-icon.png'),width:1440,height:960,minWidth:760,minHeight:560,show:!smoke,backgroundColor:'#faf9f7',autoHideMenuBar:true,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false,spellcheck:false}});
+ window.on('close',event=>{if(!quitting){event.preventDefault();app.quit();}});
  const wc=window.webContents;
  wc.session.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));
  wc.session.setPermissionCheckHandler(()=>false);
@@ -56,7 +57,7 @@ async function createWindow(){
 if(!app.requestSingleInstanceLock()){app.quit();}else{
  app.on('second-instance',()=>{if(window){if(window.isMinimized())window.restore();window.show();window.focus();}});
  app.on('window-all-closed',()=>app.quit());
- app.on('before-quit',event=>{if(quitting)return;event.preventDefault();quitting=true;stopBackend().finally(()=>app.exit(process.exitCode||0));});
+ app.on('before-quit',event=>{if(quitting)return;event.preventDefault();quitting=true;(async()=>{let saved=true,timer;if(window&&!window.isDestroyed()){try{saved=await Promise.race([window.webContents.executeJavaScript("typeof window.zhizhiFlush==='function'?window.zhizhiFlush():true"),new Promise(resolve=>timer=setTimeout(()=>resolve(false),15000))]);}catch{saved=false;}finally{clearTimeout(timer);}}if(!saved&&!smoke){quitting=false;await dialog.showMessageBox(window,{type:'error',title:'尚未保存',message:'保存暂未完成，窗口已保留。请重试保存后再退出。'});return;}if(!saved)process.exitCode=1;await stopBackend();app.exit(process.exitCode||0);})().catch(()=>app.exit(1));});
  app.whenReady().then(startBackend).then(createWindow).catch(async error=>{process.exitCode=1;if(smoke)console.error(error.message);else await dialog.showMessageBox({type:'error',title:'知枝暂时无法启动',message:error.message});app.quit();});
 }
 

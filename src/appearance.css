@@ -149,3 +149,27 @@ body:has(.modal-overlay) .toast{top:12px}
 
 .brand-mark{border-radius:8px}
 .knowledge-node.highlighted.active{box-shadow:inset 3px 0 #cd4050}
+
+/* Content-driven cards: title, summary and formula remain fully visible. */
+.knowledge-node{height:auto;min-height:170px;overflow:visible;display:flex;flex-direction:column;width:320px}
+.knowledge-node h3{display:block;white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word;overflow-wrap:anywhere;max-height:none;height:auto;-webkit-line-clamp:unset;flex-shrink:0}
+.knowledge-node p,.knowledge-node:has(.node-formula) p{display:block;height:auto;min-height:0;max-height:none;overflow:visible;-webkit-line-clamp:unset;white-space:pre-wrap;overflow-wrap:anywhere;flex-shrink:0}
+.node-formula{position:static;max-height:none;height:auto;overflow-x:auto;overflow-y:hidden;white-space:normal;flex-shrink:0;margin:10px 0 0;padding:0}
+.node-footer{position:static;min-height:39px;height:auto;padding:8px 0;flex-shrink:0;margin-top:6px}
+.node-footer>span:nth-child(2){white-space:normal;overflow:visible;overflow-wrap:anywhere;flex:1}
+.node-meta{flex-shrink:0}.node-toggle{flex-shrink:0}
+.generation-slot{height:4px;margin-top:12px;flex-shrink:0}
+.generation-bar{position:static;height:4px;width:100%}
+.generation-bar i{animation:none!important;transform:none!important;opacity:1!important;transition:width .2s linear}
+.overview-node{display:block;min-height:170px;overflow:hidden}.overview-node h3{max-height:none}
+.outline-rebuild{font-size:12px;color:#356556;white-space:nowrap;padding:6px 9px;border:1px solid #c4dccf;border-radius:7px;background:#e9f3ee}
+.prefetch-toggle{margin-left:0}.canvas-top .breadcrumbs{margin-right:auto}
+@media(max-width:1000px){.canvas-top{flex-wrap:wrap;height:auto;min-height:60px;padding-top:8px;padding-bottom:8px}.canvas-top .breadcrumbs{flex-basis:100%}}
+
+/* Keep all reading content neutral and legible, including selected cards. */
+.knowledge-node h3,.knowledge-node.active h3,.knowledge-node p,.knowledge-node.active p,.node-formula,.node-footer,.type-label,.type-label.formula,.type-label.example{color:#303632}
+.knowledge-node .katex,.details .katex{color:inherit}
+.relation-label text{fill:#303632}.relation-label rect{fill:#fff;stroke:#d4ddd7}
+.outline-row,.outline-row.selected,.breadcrumbs,.breadcrumbs button,.detail-summary,.prose,.details h4,.detail-type,.status-picker button,.status-picker .selected{color:#303632}
+.primary,.primary.small,.agent-connect,.agent-connect.is-connected,.outline-rebuild,.prefetch-toggle{color:#303632}
+.knowledge-node.active:is(.type-question,.type-answer,.type-formula,.type-example){color:#303632}
