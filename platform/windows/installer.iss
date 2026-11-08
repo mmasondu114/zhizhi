@@ -16,7 +16,7 @@ MinVersion=10.0
 OutputDir={#OutputPath}
 OutputBaseFilename=Zhizhi-{#AppVersion}-windows-x64-setup
 SetupIconFile={#StagePath}\Zhizhi.ico
-UninstallDisplayIcon={app}\Zhizhi.exe
+UninstallDisplayIcon={app}\Zhizhi.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -31,7 +31,8 @@ Source: "{#StagePath}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 [Icons]
-Name: "{group}\知枝"; Filename: "{app}\Zhizhi.exe"
-Name: "{autodesktop}\知枝"; Filename: "{app}\Zhizhi.exe"; Tasks: desktopicon
+Name: "{group}\知枝"; Filename: "{app}\Zhizhi.exe"; IconFilename: "{app}\Zhizhi.ico"
+Name: "{autodesktop}\知枝"; Filename: "{app}\Zhizhi.exe"; IconFilename: "{app}\Zhizhi.ico"; Tasks: desktopicon
 [Run]
 Filename: "{app}\Zhizhi.exe"; Description: "Open Zhizhi"; Flags: nowait postinstall skipifsilent
+

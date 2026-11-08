@@ -30,7 +30,7 @@ async function stopBackend(){
  log?.end();
 }
 async function createWindow(){
- window=new BrowserWindow({title:'知枝',width:1440,height:960,minWidth:760,minHeight:560,show:!smoke,backgroundColor:'#faf9f7',autoHideMenuBar:true,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false,spellcheck:false}});
+ window=new BrowserWindow({title:'知枝',icon:path.join(root,'dist','app-icon.png'),width:1440,height:960,minWidth:760,minHeight:560,show:!smoke,backgroundColor:'#faf9f7',autoHideMenuBar:true,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false,spellcheck:false}});
  const wc=window.webContents;
  wc.session.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));
  wc.session.setPermissionCheckHandler(()=>false);
@@ -59,3 +59,4 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
  app.on('before-quit',event=>{if(quitting)return;event.preventDefault();quitting=true;stopBackend().finally(()=>app.exit(process.exitCode||0));});
  app.whenReady().then(startBackend).then(createWindow).catch(async error=>{process.exitCode=1;if(smoke)console.error(error.message);else await dialog.showMessageBox({type:'error',title:'知枝暂时无法启动',message:error.message});app.quit();});
 }
+

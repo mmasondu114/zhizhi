@@ -1,3 +1,4 @@
+import {readProviderResponse} from './streaming.js';
 import {macClientCandidates} from './platform.js';
 import {spawn} from 'node:child_process';
 import {existsSync,readdirSync,statSync} from 'node:fs';
@@ -13,7 +14,7 @@ export const SYSTEM=`你是严谨的中文学习导师。只输出指定 JSON，
 教材、范围、已有基础和学习偏好全部选填，不能因缺少其中任何一项拒绝展开或要求先去设置。已提供教材时，优先结合教材片段、目录和学习目标识别主题；没有教材时，直接根据具体学习目标与当前节点讲解。章节编号没有统一含义，不能猜测AP Statistics Chapter 3对应哪个教材章节。如果只有章节编号，且教材、目标、当前节点和上下文都不足以识别具体主题，用一个question类型、提问关系的节点简短询问“这一章想学什么主题？”，邀请直接右键回答；不要输出错误或要求必须上传教材、填写范围。用户已经给出具体主题时直接讲解，不再追问章节。操作指令、用户基础不能当教材。sources只允许引用提供的片段id，不能编造页码；不由教材支持的补充不引用sources。
 JSON格式：${JSON.stringify(outputSchema)}。公式为纯LaTeX字符串，无美元符号；回答问题时直接答案使用answer类型。`;
 
-export function runProcess(command,args,{input='',signal,timeout=120000,cwd,maxBytes=200000}={}){
+export function runProcess(command,args,{input='',signal,timeout=120000,cwd,maxBytes=200000,onOutput}={}){
  return new Promise((resolve,reject)=>{
   if(signal?.aborted)return reject(new Error('请求已取消'));
   const child=spawn(command,args,{shell:false,windowsHide:true,detached:process.platform!=='win32',cwd,stdio:['pipe','pipe','pipe']});let out='',err='',done=false;
@@ -21,7 +22,7 @@ export function runProcess(command,args,{input='',signal,timeout=120000,cwd,maxB
   function finish(error){if(done)return;done=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(out);}
   const abort=()=>{kill();finish(new Error('请求已取消'));};const timer=setTimeout(()=>{kill();finish(new Error('请求超时，请稍后重试'));},timeout);
   signal?.addEventListener('abort',abort,{once:true});
-  child.stdout.on('data',b=>{out+=b.toString();if(out.length>maxBytes){kill();finish(new Error('客户端输出过长'));}});
+  child.stdout.on('data',b=>{out+=b.toString();onOutput?.(out.length);if(out.length>maxBytes){kill();finish(new Error('客户端输出过长'));}});
   child.stderr.on('data',b=>{err=(err+b.toString()).slice(-4000);});
   child.on('error',()=>finish(new Error('客户端未安装或无法启动')));
   child.on('close',code=>finish(code?new Error(`客户端退出（${code}）；请检查官方客户端登录、网络和模型配置`):null));
@@ -51,31 +52,42 @@ export function clientText(kind,raw){
  let response='';for(const line of raw.split('\n')){try{const event=JSON.parse(line);if(event.type==='item.completed'&&event.item?.type==='agent_message')response=event.item.text;}catch{}}return response;
 }
 function invocation(file,args){return /\.(mjs|js)$/i.test(file)?[process.execPath,[file,...args]]:[file,args];}
+const clientInspectionCache=new Map();
 export async function inspectClient(kind,custom=''){
+ const file=findClient(kind,custom);if(!file)return {installed:false,status:'未安装',path:''};
+ let stamp;try{stamp=statSync(file).mtimeMs;}catch{return {installed:false,status:'未安装',path:''};}
+ const key=JSON.stringify([kind,file,stamp]),cached=clientInspectionCache.get(key);if(cached&&cached.until>Date.now())return cached.result;
+ const result=await inspectClientUncached(kind,file);if(result.supported){clientInspectionCache.set(key,{until:Date.now()+60000,result});if(clientInspectionCache.size>12)clientInspectionCache.delete(clientInspectionCache.keys().next().value);}return result;
+}
+async function inspectClientUncached(kind,custom=''){
  const file=findClient(kind,custom);if(!file)return {installed:false,status:'未安装',path:''};
  try{const [cmd,args]=invocation(file,['--version']);const version=(await runProcess(cmd,args,{timeout:12000,maxBytes:20000})).trim();const [hc,ha]=invocation(file,kind==='codex'?['exec','--help']:['--help']);const help=await runProcess(hc,ha,{timeout:12000,maxBytes:100000});const supported=kind==='codex'?help.includes('--output-schema')&&help.includes('--sandbox')&&help.includes('--ignore-user-config'):help.includes('--tools')&&help.includes('--json-schema');return {installed:true,supported,version,path:file,status:supported?'已安装 · 需测试连接':'版本缺少安全非交互参数，请更新客户端'};}catch{return {installed:false,path:file,status:'安装损坏或无法启动'};}
 }
-export async function callProvider(config,context,{signal,timeoutMs}={}){
+export async function callProvider(config,context,{signal,timeoutMs,onProgress}={}){
  const timeout=timeoutMs||config.timeoutMs||120000;const content=JSON.stringify(context);const deadline=AbortSignal.timeout(timeout);const combined=signal?AbortSignal.any([signal,deadline]):deadline;
  if(config.kind==='openai'||config.kind==='anthropic'){
   if(!config.baseUrl||!config.model)throw new Error('请先填写 Base URL 与模型名称');
   const url=new URL(config.baseUrl);if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw new Error('Base URL 必须为不含凭据的 HTTP(S) 地址');
   const base=config.baseUrl.replace(/\/$/,'');const anthropic=config.kind==='anthropic';
   const headers={'Content-Type':'application/json'};if(anthropic){headers['anthropic-version']='2023-06-01';if(config.key)headers['x-api-key']=config.key;}else if(config.key)headers.Authorization=`Bearer ${config.key}`;
+  onProgress?.({stage:'connecting'});
   const body=anthropic?{model:config.model,max_tokens:6000,system:SYSTEM,messages:[{role:'user',content}]}:{model:config.model,messages:[{role:'system',content:SYSTEM},{role:'user',content}],stream:false};
+  if(onProgress)body.stream=true;
   let res;try{res=await fetch(base+(anthropic?'/messages':'/chat/completions'),{method:'POST',headers,body:JSON.stringify(body),signal:combined});}catch{throw new Error(signal?.aborted?'请求已取消':deadline.aborted?'请求超时，请检查服务':'连接失败或连接中断，请检查地址和网络');}
   if(!res.ok){await res.body?.cancel();throw new Error(res.status===401?'401：凭据无效或登录已过期':res.status===429?'429：请求过多或额度受限，请稍后重试':`模型服务返回 HTTP ${res.status}`);}
-  let raw='';const decoder=new TextDecoder();try{for await(const buf of res.body){raw+=decoder.decode(buf,{stream:true});if(raw.length>300000)throw new Error('输出过长');}raw+=decoder.decode();}catch{throw new Error(deadline.aborted?'请求超时':signal?.aborted?'请求已取消':'响应中断或超过长度限制');}
-  let data;try{data=JSON.parse(raw);}catch{throw new Error('服务返回了非法 JSON');}
-  const result=anthropic?data.content?.filter(c=>c.type==='text').map(c=>c.text).join('\n'):data.choices?.[0]?.message?.content;
+  let result;try{onProgress?.({stage:'waiting'});result=await readProviderResponse(res,{anthropic,onProgress});}catch(error){throw new Error(deadline.aborted?'请求超时':signal?.aborted?'请求已取消':/terminated|fetch failed|socket/i.test(error.message)?'响应中断，请重试':error.message);}
+  onProgress?.({stage:'validating'});
   return parseGeneration(result,context.materials?.map(m=>m.id)||[]);
  }
  if(config.kind==='codex'||config.kind==='claude'){
-  const info=await inspectClient(config.kind,config.clientPath);if(!info.installed||!info.supported)throw new Error(info.status);
+  onProgress?.({stage:'checking'});
+  const info=await inspectClient(config.kind,config.clientPath);combined.throwIfAborted();if(!info.installed||!info.supported)throw new Error(info.status);
   const cwd=await fs.mkdtemp(path.join(os.tmpdir(),'knowledge-tree-'));const schemaPath=path.join(cwd,'schema.json');await fs.writeFile(schemaPath,JSON.stringify(outputSchema));
   try{
+   onProgress?.({stage:'waiting'});
    const args=clientArgs(config.kind,schemaPath,config.model);
-   const [cmd,argv]=invocation(info.path,args);const raw=await runProcess(cmd,argv,{input:SYSTEM+'\n\n'+content,signal:combined,timeout,cwd,maxBytes:500000});
+   const [cmd,argv]=invocation(info.path,args);const raw=await runProcess(cmd,argv,{input:SYSTEM+'\n\n'+content,signal:combined,timeout,cwd,maxBytes:500000,onOutput:bytes=>onProgress?.({stage:'receiving',bytes})});
+   onProgress?.({stage:'validating'});
    const response=clientText(config.kind,raw);
    return parseGeneration(response,context.materials?.map(m=>m.id)||[]);
   }finally{await fs.rm(cwd,{recursive:true,force:true});}

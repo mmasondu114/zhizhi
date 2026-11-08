@@ -26,7 +26,7 @@ cp -R server shared dist "$RES/backend/"
 # Install production dependencies for this ARM Mac, never reuse Windows node_modules.
 (cd "$RES/backend" && npm ci --omit=dev --no-audit --no-fund)
 xcrun swiftc -target arm64-apple-macos14.0 -O -framework Security platform/macos/Keychain.swift -o "$RES/zhizhi-keychain"
-xcrun swift scripts/macos-icon.swift "$WORK/icon.png"
+cp public/app-icon.png "$WORK/icon.png"
 mkdir -p "$WORK/AppIcon.iconset"
 for size in 16 32 128 256 512; do
   sips -z "$size" "$size" "$WORK/icon.png" --out "$WORK/AppIcon.iconset/icon_${size}x${size}.png" >/dev/null
@@ -77,3 +77,4 @@ if [ -n "${MAC_NOTARY_PROFILE:-}" ]; then
 fi
 (cd release && shasum -a 256 "Zhizhi-${VERSION}-macos-arm64.pkg" > SHA256SUMS.txt)
 echo "Built: $OUTPUT"
+

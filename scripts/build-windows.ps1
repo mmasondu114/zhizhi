@@ -20,15 +20,7 @@ if ($LASTEXITCODE) { throw 'Frontend build failed' }
 foreach ($item in @('package.json','package-lock.json','server','shared','dist')) { Copy-Item -LiteralPath (Join-Path $projectRoot $item) -Destination (Join-Path $stage 'backend') -Recurse }
 Push-Location (Join-Path $stage 'backend')
 try { & npm.cmd ci --omit=dev --no-audit --no-fund; if ($LASTEXITCODE) { throw 'Production dependency install failed' } } finally { Pop-Location }
-Add-Type -AssemblyName System.Drawing
-$bitmap = [Drawing.Bitmap]::new(256,256)
-$graphics = [Drawing.Graphics]::FromImage($bitmap)
-$graphics.Clear([Drawing.Color]::FromArgb(110,83,181))
-$font = [Drawing.Font]::new('Microsoft YaHei',140,[Drawing.FontStyle]::Bold,[Drawing.GraphicsUnit]::Pixel)
-$graphics.DrawString('枝',$font,[Drawing.Brushes]::White,25,23)
-$icon = [Drawing.Icon]::FromHandle($bitmap.GetHicon())
-$stream = [IO.File]::Create((Join-Path $stage 'Zhizhi.ico'))
-try { $icon.Save($stream) } finally { $stream.Dispose();$graphics.Dispose();$font.Dispose();$bitmap.Dispose() }
+Copy-Item -LiteralPath (Join-Path $projectRoot 'public\app-icon.ico') -Destination (Join-Path $stage 'Zhizhi.ico')
 & node scripts/package-desktop.mjs win32 x64 $stage (Join-Path $buildRoot 'desktop') (Join-Path $stage 'Zhizhi.ico')
 if ($LASTEXITCODE) { throw 'Desktop window bundle failed' }
 $desktopStage = Join-Path $buildRoot 'desktop\Zhizhi-win32-x64'
@@ -44,3 +36,4 @@ $output = Join-Path $projectRoot "release\Zhizhi-$version-windows-x64-setup.exe"
 $hash = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText((Join-Path $projectRoot 'release\SHA256SUMS-windows.txt'), "$hash  $([IO.Path]::GetFileName($output))`n",[Text.UTF8Encoding]::new($false))
 Write-Output "Built: $output"
+
