@@ -1,3 +1,4 @@
+import {retryRateLimited} from './generation-retry.js';
 import {callProvider} from './providers.js';
 import {ancestors} from '../shared/tree.js';
 import {relevantChunks} from '../shared/protocol.js';
@@ -32,45 +33,59 @@ export function mergeKnowledge(nodes){
  return [...merged.values()];
 }
 
-export async function generateComplete(config,graph,node,{signal,onProgress=()=>{},provider=callProvider}={}){
+export async function generateComplete(config,graph,node,{signal,onProgress=()=>{},provider=callProvider,cache,concurrency}={}){
+ const stop=new AbortController();signal=signal?AbortSignal.any([signal,stop.signal]):stop.signal;
+ let reused=0;
+ const invoke=async(context,onProgress)=>{signal.throwIfAborted();const run=()=>retryRateLimited(()=>provider(config,context,{signal,onProgress,timeoutMs:context.generationTask?Math.max(config.timeoutMs||180000,300000):undefined}),{signal,onWait:onProgress});if(!cache)return run();const result=await cache.run(config,context,run);signal.throwIfAborted();if(result.cached)reused++;return result.nodes;};
  const base={goal:graph.goal,foundation:graph.foundation,instructions:graph.instructions,scope:graph.scope,path:ancestors(graph,node.id).slice(-12).map(n=>({title:n.title,summary:n.summary,type:n.type})),current:{title:node.title,summary:node.summary,type:node.type,detail:node.detail},question:node.type==='question'?node.title:null};
  const exhaustive=graph.materials.length>0&&(node.id===graph.root||node.materialIds?.length);
  if(!exhaustive){
   const total=3;onProgress({stage:'preparing',percent:0,completed:0,total});signal?.throwIfAborted();
   const materials=relevantChunks(graph,node,ancestors(graph,node.id));
   onProgress({stage:'generating',percent:33,completed:1,total});
-  const nodes=await provider(config,{...base,materials},{signal,onProgress:p=>onProgress({...p,percent:33,completed:1,total})});
+  const nodes=await invoke({...base,materials},p=>onProgress({...p,percent:33,completed:1,total}));
   signal?.throwIfAborted();onProgress({stage:'validating',percent:66,completed:2,total});
   onProgress({stage:'complete',percent:100,completed:3,total});return {nodes};
  }
  const materials=node.id===graph.root?graph.materials:graph.materials.filter(m=>node.materialIds.includes(m.id));
  if(!materials.length)throw new Error('该章节的教材已移除，请重新梳理教材');
  const batches=materialBatches(materials),total=batches.length*2+2;let completed=0;
- const status=(stage,extra={})=>onProgress({stage,percent:Math.floor(completed/total*100),completed,total,...extra});
+ const status=(stage,extra={})=>onProgress({stage,percent:Math.floor(completed/total*100),completed,total,reused,...extra});
  status('planning');signal?.throwIfAborted();completed++;status('reading');
  const inventories=new Map(materials.map(m=>[m.id,[]]));
  let scannedChunks=0,auditPasses=0;
- for(let i=0;i<batches.length;i++){
-  signal?.throwIfAborted();const {material,chunks}=batches[i];
-  const context={...base,materials:chunks,document:material.name,batch:i+1,batchCount:batches.length};
-  const detail={file:material.name,batch:i+1,batches:batches.length};
-  status('reading',detail);
-  const extracted=await provider(config,{...context,generationTask:'inventory'},{signal,onProgress:p=>status('reading',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes})});
-  if(!extracted.length||extracted.some(n=>!n.sources?.length))throw new Error(`${material.name}：知识点缺少教材来源，未把不完整结果写入图中，请重试`);
-  completed++;status('reviewing',detail);
-  let batchNodes=extracted,reviewed=false;
-  for(let round=1;round<=8;round++){
-   signal?.throwIfAborted();status('reviewing',{...detail,reviewRound:round});
-   const missing=await provider(config,{...context,generationTask:'coverage-audit',existing:batchNodes},{signal,onProgress:p=>status('reviewing',{...detail,reviewRound:round,providerStage:p.stage,characters:p.characters,bytes:p.bytes})});auditPasses++;
-   if(missing.some(n=>!n.sources?.length))throw new Error(material.name+'：复核补充缺少来源，请重试');
-   if(!missing.length){reviewed=true;break;}
-   const combined=mergeKnowledge([...batchNodes,...missing]);
-   if(JSON.stringify(combined)===JSON.stringify(batchNodes))throw new Error(material.name+'：模型复核反复返回相同内容，尚未完成，请重试');
-   batchNodes=combined;
+ const results=new Array(batches.length),groups=materials.map(material=>batches.map((b,i)=>b.material.id===material.id?i:-1).filter(i=>i>=0));const lanes=Math.max(1,Math.min(Math.floor(concurrency)||groups.length,groups.length));let cursor=0,failure;
+ async function worker(){
+  while(cursor<groups.length){
+   signal.throwIfAborted();const indices=groups[cursor++];
+   for(const i of indices){
+   signal.throwIfAborted();const {material,chunks}=batches[i];
+   const context={...base,materials:chunks,document:material.name,batch:i+1,batchCount:batches.length};
+   const detail={file:material.name,batch:i+1,batches:batches.length,parallel:lanes};
+   status('reading',detail);
+   const extracted=await invoke({...context,generationTask:'inventory'},p=>status('reading',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
+   signal.throwIfAborted();
+   if(!extracted.length||extracted.some(n=>!n.sources?.length))throw new Error(material.name+'：知识点缺少教材来源，请重试');
+   completed++;status('reviewing',detail);
+   let batchNodes=extracted,reviewed=false;
+   for(let round=1;round<=8;round++){
+    signal.throwIfAborted();status('reviewing',{...detail,reviewRound:round});
+    const missing=await invoke({...context,generationTask:'coverage-audit',existing:batchNodes},p=>status('reviewing',{...detail,reviewRound:round,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));auditPasses++;
+    signal.throwIfAborted();
+    if(missing.some(n=>!n.sources?.length))throw new Error(material.name+'：复核补充缺少来源，请重试');
+    if(!missing.length){reviewed=true;break;}
+    const combined=mergeKnowledge([...batchNodes,...missing]);
+    if(JSON.stringify(combined)===JSON.stringify(batchNodes))throw new Error(material.name+'：模型复核反复返回相同内容，尚未完成，请重试');
+    batchNodes=combined;
+   }
+   if(!reviewed)throw new Error(material.name+'：仍有新增遗漏，未把部分结果当作完成，请拆分资料后重试');
+   results[i]=batchNodes;scannedChunks+=chunks.length;completed++;status('reviewed',detail);
+   }
   }
-  if(!reviewed)throw new Error(material.name+'：仍有新增遗漏，未把部分结果当作完成，请拆分资料后重试');
-  inventories.get(material.id).push(...batchNodes);scannedChunks+=chunks.length;completed++;status('reviewed',detail);
  }
+ await Promise.all(Array.from({length:lanes},()=>worker().catch(error=>{if(!failure)failure=error;stop.abort();})));
+ if(failure)throw failure;
+ for(let i=0;i<batches.length;i++)inventories.get(batches[i].material.id).push(...results[i]);
  signal?.throwIfAborted();status('assembling');
  const nodes=[];let concepts=0;
  for(const material of [...materials].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}))){

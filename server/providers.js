@@ -18,14 +18,14 @@ export function runProcess(command,args,{input='',signal,timeout=120000,cwd,maxB
  return new Promise((resolve,reject)=>{
   if(signal?.aborted)return reject(new Error('请求已取消'));
   const child=spawn(command,args,{shell:false,windowsHide:true,detached:process.platform!=='win32',cwd,stdio:['pipe','pipe','pipe']});let out='',err='',done=false;
-  function kill(){if(process.platform==='win32'&&child.pid)spawn('taskkill.exe',['/PID',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});else try{process.kill(-child.pid,'SIGKILL');}catch{child.kill('SIGKILL');}}
+  function kill(){if(process.platform==='win32'&&child.pid)spawn('taskkill.exe',['/PID',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'}).on('error',()=>{try{child.kill();}catch{}});else try{process.kill(-child.pid,'SIGKILL');}catch{child.kill('SIGKILL');}}
   function finish(error){if(done)return;done=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(out);}
-  const abort=()=>{kill();finish(new Error('请求已取消'));};const timer=setTimeout(()=>{kill();finish(new Error('请求超时，请稍后重试'));},timeout);
-  signal?.addEventListener('abort',abort,{once:true});
-  child.stdout.on('data',b=>{out+=b.toString();onOutput?.(out.length);if(out.length>maxBytes){kill();finish(new Error('客户端输出过长'));}});
+  const abort=()=>{kill();finish(new Error(signal?.reason?.name==='TimeoutError'?'请求超时，请重试；已完成的教材批次会复用':'请求已取消'));};const timer=setTimeout(()=>{kill();finish(new Error('请求超时，请稍后重试'));},timeout);
+  signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted){abort();return;}
+  child.stdout.on('data',b=>{if(done)return;out+=b.toString();onOutput?.(out.length);if(out.length>maxBytes){kill();finish(new Error('客户端输出过长'));}});
   child.stderr.on('data',b=>{err=(err+b.toString()).slice(-4000);});
   child.on('error',()=>finish(new Error('客户端未安装或无法启动')));
-  child.on('close',code=>finish(code?new Error(`客户端退出（${code}）；请检查官方客户端登录、网络和模型配置`):null));
+  child.on('close',code=>finish(code?new Error(/429|rate.?limit|too many requests/i.test(err+' '+out)?'429：请求过多，请稍后重试':`客户端退出（${code}）；请检查官方客户端登录、网络和模型配置`):null));
   child.stdin.on('error',()=>{});child.stdin.end(input);
  });
 }
@@ -52,12 +52,12 @@ export function clientText(kind,raw){
  let response='';for(const line of raw.split('\n')){try{const event=JSON.parse(line);if(event.type==='item.completed'&&event.item?.type==='agent_message')response=event.item.text;}catch{}}return response;
 }
 function invocation(file,args){return /\.(mjs|js)$/i.test(file)?[process.execPath,[file,...args]]:[file,args];}
-const clientInspectionCache=new Map();
+const clientInspectionCache=new Map(),clientInspections=new Map();
 export async function inspectClient(kind,custom=''){
  const file=findClient(kind,custom);if(!file)return {installed:false,status:'未安装',path:''};
  let stamp;try{stamp=statSync(file).mtimeMs;}catch{return {installed:false,status:'未安装',path:''};}
  const key=JSON.stringify([kind,file,stamp]),cached=clientInspectionCache.get(key);if(cached&&cached.until>Date.now())return cached.result;
- const result=await inspectClientUncached(kind,file);if(result.supported){clientInspectionCache.set(key,{until:Date.now()+60000,result});if(clientInspectionCache.size>12)clientInspectionCache.delete(clientInspectionCache.keys().next().value);}return result;
+ let pending=clientInspections.get(key);if(!pending){pending=inspectClientUncached(kind,file);clientInspections.set(key,pending);}let result;try{result=await pending;}finally{if(clientInspections.get(key)===pending)clientInspections.delete(key);}if(result.supported){clientInspectionCache.set(key,{until:Date.now()+60000,result});if(clientInspectionCache.size>12)clientInspectionCache.delete(clientInspectionCache.keys().next().value);}return result;
 }
 async function inspectClientUncached(kind,custom=''){
  const file=findClient(kind,custom);if(!file)return {installed:false,status:'未安装',path:''};

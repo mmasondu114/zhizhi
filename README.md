@@ -128,3 +128,9 @@ React + React Flow + Vite；Node/Express 本地后端；Zod 结构校验；KaTeX
 
 官方接口依据：[Codex 非交互模式](https://developers.openai.com/codex/noninteractive/)、[Claude Code 程序化调用](https://code.claude.com/docs/en/headless)、[Claude Code CLI](https://code.claude.com/docs/en/cli-reference)、[Anthropic Messages](https://platform.claude.com/docs/en/api/messages/create)。实际兼容能力以本机 `--help` 检查为准。
 
+
+### 并行生成与恢复
+
+每份教材独立一路并行（9 份 PDF 即 9 路），每份内部保持批次和复核顺序。受模型服务额度限制时，受限请求最多退避重试 3 次。完整、已验证的响应保存至本机 generation-cache；失败、取消或重开后点击原节点重试，会复用相同上下文及模型的已完成结果（有效期 30 天），不会跳过遗漏复核。长教材单次调用至少允许 5 分钟，最终速度由上游并发和输出速度决定。
+
+桌面显示进程异常时自动尝试重新载入（最多 2 次），从已保存知识图及浏览器恢复副本恢复；未完成的请求可点击重试。desktop.log 记录显示进程和退出原因，server.log 记录生成阶段与耗时。

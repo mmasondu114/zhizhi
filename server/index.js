@@ -1,3 +1,4 @@
+import {generationCache} from './generation-cache.js';
 import {generateComplete} from './complete-generation.js';
 import express from 'express';
 import {defaultDataDir} from './platform.js';
@@ -16,6 +17,7 @@ import {atomicWrite,readJson,protect,unprotect,forgetSecret} from './storage.js'
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 export async function createApp({dataDir=defaultDataDir({root}),port=Number(process.env.PORT||4317),dev=false}={}){
  await fs.mkdir(path.join(dataDir,'graphs'),{recursive:true});
+ const cache=generationCache(path.join(dataDir,'generation-cache'));
  const app=express(),token=randomBytes(32).toString('hex'),requests=new Map();const settingsFile=path.join(dataDir,'settings.json');
  const defaults={selected:'demo',providers:{openai:{kind:'openai',baseUrl:'',model:'',secret:'',timeoutMs:120000},anthropic:{kind:'anthropic',baseUrl:'https://api.anthropic.com/v1',model:'',secret:'',timeoutMs:120000},codex:{kind:'codex',model:'',clientPath:'',timeoutMs:180000},claude:{kind:'claude',model:'',clientPath:'',timeoutMs:180000}}};
  let settings=await readJson(settingsFile,defaults);const publicSettings=()=>({...settings,providers:Object.fromEntries(Object.entries(settings.providers).map(([id,p])=>{const {secret,...rest}=p;return [id,{...rest,hasKey:!!secret}];}))});
@@ -49,10 +51,11 @@ export async function createApp({dataDir=defaultDataDir({root}),port=Number(proc
   const controller=new AbortController(),epoch=configEpoch;requests.set(key,controller);res.on('close',()=>controller.abort());
   const streaming=(req.headers.accept||'').includes('application/x-ndjson'),started=Date.now();let lastProgress={stage:'preparing',percent:0},lastSent=0;
   const send=value=>{if(!res.destroyed&&!res.writableEnded)res.write(JSON.stringify(value)+'\n');};
-  const progress=(value,heartbeat=false)=>{lastProgress={...lastProgress,...value};if(streaming&&(heartbeat||Date.now()-lastSent>100||value.stage!=='receiving')){lastSent=Date.now();send({type:'progress',...lastProgress,elapsedMs:Date.now()-started});}};
+  const progress=(value,heartbeat=false)=>{const changed=value.percent!==lastProgress.percent||value.stage!==lastProgress.stage;lastProgress={...lastProgress,...value};if(streaming&&(heartbeat||changed||Date.now()-lastSent>250)){lastSent=Date.now();send({type:'progress',...lastProgress,elapsedMs:Date.now()-started});}};
   if(streaming){res.setHeader('Content-Type','application/x-ndjson');res.setHeader('X-Accel-Buffering','no');res.flushHeaders();progress(lastProgress);}
   const heartbeat=streaming?setInterval(()=>progress(lastProgress,true),1000):null;
-  try{const p=settings.providers[body.provider];const {nodes,coverage}=await generateComplete({...p,key:await unprotect(p.secret)},graph,node,{signal:controller.signal,onProgress:streaming?progress:undefined});if(!controller.signal.aborted&&epoch===configEpoch){connected(body.provider);const result={requestId:body.requestId,graphId:graph.id,parentId:node.id,nodes,coverage,connection};if(streaming){send({type:'result',...result});res.end();}else res.json(result);}}catch(error){if(epoch===configEpoch&&!controller.signal.aborted)connection={kind:body.provider,status:'error',message:error.message};if(streaming){if(!controller.signal.aborted)send({type:'error',error:error.message});res.end();}else throw error;}finally{clearInterval(heartbeat);if(requests.get(key)===controller)requests.delete(key);}
+  console.log(JSON.stringify({event:'generation-start',at:new Date().toISOString(),requestId:body.requestId,provider:body.provider,files:graph.materials.length}));
+  try{const p=settings.providers[body.provider];const {nodes,coverage}=await generateComplete({...p,key:await unprotect(p.secret)},graph,node,{signal:controller.signal,cache,onProgress:streaming?progress:undefined});if(!controller.signal.aborted&&epoch===configEpoch){console.log(JSON.stringify({event:'generation-complete',at:new Date().toISOString(),requestId:body.requestId,elapsedMs:Date.now()-started,coverage}));connected(body.provider);const result={requestId:body.requestId,graphId:graph.id,parentId:node.id,nodes,coverage,connection};if(streaming){send({type:'result',...result});res.end();}else res.json(result);}}catch(error){console.error(JSON.stringify({event:controller.signal.aborted?'generation-cancelled':'generation-failed',at:new Date().toISOString(),requestId:body.requestId,elapsedMs:Date.now()-started,stage:lastProgress.stage,percent:lastProgress.percent,error:error.message}));if(epoch===configEpoch&&!controller.signal.aborted)connection={kind:body.provider,status:'error',message:error.message};if(streaming){if(!controller.signal.aborted)send({type:'error',error:error.message});res.end();}else throw error;}finally{clearInterval(heartbeat);if(requests.get(key)===controller)requests.delete(key);}
  });
  if(dev){const {createServer}=await import('vite');const vite=await createServer({root,server:{middlewareMode:true},appType:'spa'});app.use(vite.middlewares);}else{app.use(express.static(path.join(root,'dist')));app.get('/{*path}',(req,res)=>res.sendFile(path.join(root,'dist/index.html')));}
  app.use((err,req,res,next)=>{if(res.headersSent)return next(err);const error=err instanceof z.ZodError?'数据格式不正确，未覆盖原有内容':err.message||'服务异常';res.status(err.code==='LIMIT_FILE_SIZE'?413:400).json({error});});
