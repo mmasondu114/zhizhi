@@ -45,8 +45,6 @@ export async function createApp({dataDir=defaultDataDir({root}),port=Number(proc
   const body=z.object({requestId:z.string().uuid(),graph:z.unknown(),nodeId:z.string(),provider:z.enum(['openai','anthropic','codex','claude'])}).parse(req.body);const graph=validateGraph(body.graph);const node=graph.nodes.find(n=>n.id===body.nodeId);if(!node)throw new Error('节点已删除');
   const key=graph.id+':'+node.id;if(requests.has(key))return res.status(409).json({error:'该分支正在生成'});if(body.provider!==settings.selected)return res.status(409).json({error:'模型已切换，请重试'});
   const pathNodes=ancestors(graph,node.id);const fragments=relevantChunks(graph,node,pathNodes);
-  if(/(?:chapter|ch\.?|第)\s*\d+|第.{1,4}章/i.test(graph.goal)&&!graph.scope)throw new Error('章节范围尚未确认：请在「教材」中填写资料对应的章节范围');
-  if(/(?:chapter|ch\.?|第)\s*\d+|第.{1,4}章/i.test(graph.goal)&&!fragments.length)throw new Error('没有找到对应教材片段，请上传该章正文或目录并确认范围');
   const controller=new AbortController(),epoch=configEpoch;requests.set(key,controller);res.on('close',()=>controller.abort());
   try{const p=settings.providers[body.provider];const nodes=await callProvider({...p,key:await unprotect(p.secret)},{goal:graph.goal,foundation:graph.foundation,instructions:graph.instructions,scope:graph.scope,path:pathNodes.slice(-12).map(n=>({title:n.title,summary:n.summary,type:n.type})),current:{title:node.title,summary:node.summary,type:node.type,detail:node.detail},question:node.type==='question'?node.title:null,materials:fragments},{signal:controller.signal});if(!controller.signal.aborted&&epoch===configEpoch){connected(body.provider);res.json({requestId:body.requestId,graphId:graph.id,parentId:node.id,nodes,connection});}}catch(error){if(epoch===configEpoch&&!controller.signal.aborted)connection={kind:body.provider,status:'error',message:error.message};throw error;}finally{requests.delete(key);}
  });
@@ -58,3 +56,4 @@ if(process.argv[1]&&await fs.realpath(process.argv[1]).catch(()=>path.resolve(pr
  const port=Number(process.env.PORT||4317);const app=await createApp({port,dev:process.argv.includes('--dev')});const server=app.listen(port,'127.0.0.1',()=>console.log(`知枝已启动 http://127.0.0.1:${port}`));server.on('error',e=>{console.error(e.code==='EADDRINUSE'?'端口已占用，请打开已运行的应用或设置 PORT':e.message);process.exit(1);});
  let stopping=false;const shutdown=()=>{if(stopping)return;stopping=true;app.locals.shutdown();server.closeIdleConnections();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),1500).unref();};process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);process.on('message',message=>{if(message?.type==='shutdown')shutdown();});if(process.send)process.on('disconnect',shutdown);
 }
+
