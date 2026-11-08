@@ -13,7 +13,7 @@ if(platform==='darwin')resources.push(path.join(stage,'zhizhi-keychain'));
 // Rewrite only internal resource links before signing; no build-machine paths may escape.
 async function repairResourceLinks({buildPath}){
  if(platform!=='darwin')return;
- const targetRoot=path.join(buildPath,'Contents','Resources');let repaired=0;
+ const targetRoot=path.join(buildPath,'Zhizhi.app','Contents','Resources');let repaired=0;
  async function walk(dir){for(const entry of await fs.readdir(dir,{withFileTypes:true})){
   const file=path.join(dir,entry.name);
   if(entry.isSymbolicLink()){
@@ -26,5 +26,5 @@ async function repairResourceLinks({buildPath}){
  for(const source of resources){const target=path.join(targetRoot,path.basename(source));if((await fs.stat(target)).isDirectory())await walk(target);}
  console.log('Verified internal resource links: '+repaired);
 }
-const results=await packager({dir:shellDir,out,name:'Zhizhi',executableName:'Zhizhi',platform,arch,electronVersion:pkg.devDependencies.electron,appVersion:pkg.version,appBundleId:'io.github.mmasondu114.zhizhi',icon,asar:true,prune:false,overwrite:true,extraResource:resources,afterCopyExtraResources:[repairResourceLinks],...(platform==='darwin'?{osxSign:{identity:process.env.MAC_APP_SIGN_IDENTITY||'-',identityValidation:!!process.env.MAC_APP_SIGN_IDENTITY,hardenedRuntime:!!process.env.MAC_APP_SIGN_IDENTITY,gatekeeperAssess:false},extendInfo:{CFBundleDisplayName:'知枝',LSMinimumSystemVersion:'14.0'}}:{win32metadata:{CompanyName:'Zhizhi',FileDescription:'知枝 · 交互式知识树',ProductName:'知枝'}})});
+const results=await packager({dir:shellDir,out,name:'Zhizhi',executableName:'Zhizhi',platform,arch,electronVersion:pkg.devDependencies.electron,appVersion:pkg.version,appBundleId:'io.github.mmasondu114.zhizhi',icon,asar:true,prune:false,overwrite:true,extraResource:resources,afterCopyExtraResources:[repairResourceLinks],...(platform==='darwin'?{osxSign:{continueOnError:false,identity:process.env.MAC_APP_SIGN_IDENTITY||'-',identityValidation:!!process.env.MAC_APP_SIGN_IDENTITY,hardenedRuntime:!!process.env.MAC_APP_SIGN_IDENTITY,gatekeeperAssess:false},extendInfo:{CFBundleDisplayName:'知枝',LSMinimumSystemVersion:'14.0'}}:{win32metadata:{CompanyName:'Zhizhi',FileDescription:'知枝 · 交互式知识树',ProductName:'知枝'}})});
 console.log('Desktop bundle: '+results[0]);
