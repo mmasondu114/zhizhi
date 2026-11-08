@@ -36,23 +36,23 @@ export function mergeKnowledge(nodes){
 export async function generateComplete(config,graph,node,{signal,onProgress=()=>{},provider=callProvider,cache,concurrency}={}){
  const stop=new AbortController();signal=signal?AbortSignal.any([signal,stop.signal]):stop.signal;
  let reused=0;
- const invoke=async(context,onProgress)=>{signal.throwIfAborted();const run=()=>retryRateLimited(()=>provider(config,context,{signal,onProgress,timeoutMs:context.generationTask?Math.max(config.timeoutMs||180000,context.generationTask==='core-synthesis'?600000:300000):undefined}),{signal,onWait:onProgress});if(!cache)return run();const result=await cache.run(config,context,run);signal.throwIfAborted();if(result.cached)reused++;return result.nodes;};
+ const invoke=async(context,onProgress)=>{signal.throwIfAborted();const run=()=>retryRateLimited(()=>provider(config,context,{signal,onProgress,timeoutMs:context.generationTask?Math.max(config.timeoutMs||180000,context.generationTask==='hierarchy-synthesis'?600000:300000):undefined}),{signal,onWait:onProgress});if(!cache)return run();const result=await cache.run(config,context,run);signal.throwIfAborted();if(result.cached)reused++;return result.nodes;};
  const base={goal:graph.goal,foundation:graph.foundation,instructions:graph.instructions,scope:graph.scope,path:ancestors(graph,node.id).slice(-12).map(n=>({title:n.title,summary:n.summary,type:n.type})),current:{title:node.title,summary:node.summary,type:node.type,detail:node.detail},question:node.type==='question'?node.title:null};
  const exhaustive=graph.materials.length>0&&(node.id===graph.root||node.materialIds?.length);
  if(!exhaustive){
   const total=3;onProgress({stage:'preparing',percent:0,completed:0,total});signal?.throwIfAborted();
   const materials=relevantChunks(graph,node,ancestors(graph,node.id));
   onProgress({stage:'generating',percent:33,completed:1,total});
-  const nodes=await invoke({...base,materials},p=>onProgress({...p,percent:33,completed:1,total}));
+  const nodes=await invoke({...base,materials,generationTask:'focused-layer'},p=>onProgress({...p,percent:33,completed:1,total}));
   signal?.throwIfAborted();onProgress({stage:'validating',percent:66,completed:2,total});
   onProgress({stage:'complete',percent:100,completed:3,total});return {nodes};
  }
  const materials=node.id===graph.root?graph.materials:graph.materials.filter(m=>node.materialIds.includes(m.id));
  if(!materials.length)throw new Error('该章节的教材已移除，请重新梳理教材');
- const batches=materialBatches(materials),total=batches.length*2+3;let completed=0;
+ const batches=materialBatches(materials),total=batches.length*2+materials.length+2;let completed=0;
  const status=(stage,extra={})=>onProgress({stage,percent:Math.floor(completed/total*100),completed,total,reused,...extra});
  status('planning');signal?.throwIfAborted();completed++;status('reading');
- const inventories=new Map(materials.map(m=>[m.id,[]]));
+ const outlines=new Map();
  let scannedChunks=0,auditPasses=0;
  const results=new Array(batches.length),groups=materials.map(material=>batches.map((b,i)=>b.material.id===material.id?i:-1).filter(i=>i>=0));const lanes=Math.max(1,Math.min(Math.floor(concurrency)||groups.length,groups.length));let cursor=0,failure;
  async function worker(){
@@ -81,20 +81,23 @@ export async function generateComplete(config,graph,node,{signal,onProgress=()=>
    if(!reviewed)throw new Error(material.name+'：仍有新增遗漏，未把部分结果当作完成，请拆分资料后重试');
    results[i]=batchNodes;scannedChunks+=chunks.length;completed++;status('reviewed',detail);
    }
+   const material=batches[indices[0]].material;
+   const candidates=mergeKnowledge(indices.flatMap(i=>results[i])).filter(n=>n.type!=='example'&&n.relation!=='举例');
+   if(!candidates.length)throw new Error(material.name+'：未提炼到核心概念');
+   const detail={file:material.name,parallel:lanes};status('assembling',detail);
+   const prepared=await invoke({...base,generationTask:'hierarchy-synthesis',hierarchyVersion:2,document:material.name,materials:[],allowedSourceIds:material.chunks.map(c=>c.id),candidates},p=>status('assembling',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
+   function clean(nodes){if(!nodes.length)throw new Error(material.name+'：未整理到核心主题，请重试');return nodes.map(n=>{if(n.type==='example'||n.relation==='举例'||!n.sources.length)throw new Error(material.name+'：主题应为有教材依据的核心知识');const {outline,...leaf}=n;return {...leaf,prepared:true,example:'',...(outline?.length?{outline:clean(outline)}:{})};});}
+   outlines.set(material.id,clean(prepared));completed++;status('reviewed',detail);
   }
  }
  await Promise.all(Array.from({length:lanes},()=>worker().catch(error=>{if(!failure)failure=error;stop.abort();})));
  if(failure)throw failure;
- for(let i=0;i<batches.length;i++)inventories.get(batches[i].material.id).push(...results[i]);
- signal?.throwIfAborted();status('assembling');
- const candidates=mergeKnowledge([...inventories.values()].flat()).filter(n=>n.type!=='example'&&n.relation!=='举例');
- if(!candidates.length)throw new Error('未提炼到核心概念，请检查教材正文后重试');
- const nodes=(await invoke({...base,generationTask:'core-synthesis',materials:[],allowedSourceIds:materials.flatMap(m=>m.chunks.map(c=>c.id)),candidates},p=>status('assembling',{providerStage:p.stage,characters:p.characters,bytes:p.bytes}))).filter(n=>n.type!=='example'&&n.relation!=='举例').map(n=>({...n,example:''}));
- signal.throwIfAborted();if(!nodes.length)throw new Error('核心知识点整理为空，请重试');
- if(nodes.some(n=>!n.sources.length))throw new Error('核心概念缺少教材依据，请重试');
- completed++;status('validating');
- if(graph.nodes.length+nodes.length>5000)throw new Error('知识点超过当前图容量，请分图整理');
- const concepts=nodes.length;
- const coverage={files:materials.length,chunks:scannedChunks,batches:batches.length,reviewedBatches:batches.length,auditPasses,concepts,coreConcepts:true};
+ signal.throwIfAborted();status('validating');
+ const ordered=[...materials].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+ const nodes=node.id===graph.root?ordered.map(material=>{const outline=outlines.get(material.id);return {title:material.name.replace(/\.pdf$/i,'').slice(0,100),summary:outline.length+' 个核心主题 · 点击逐层展开',detail:'先选择这份教材中的核心主题，再按需深入具体概念。练习可在知识点右键菜单打开。',type:'knowledge',relation:'组成',formula:'',example:'',sources:[],materialIds:[material.id],outline};}):ordered.flatMap(material=>outlines.get(material.id));
+ const count=nodes=>nodes.reduce((sum,n)=>sum+1+(n.outline?count(n.outline):0),0);
+ if(graph.nodes.length+count(nodes)>5000)throw new Error('知识点超过当前图容量，请分图整理');
+ const concepts=[...outlines.values()].reduce((sum,nodes)=>sum+count(nodes),0);
+ const coverage={files:materials.length,chunks:scannedChunks,batches:batches.length,reviewedBatches:batches.length,auditPasses,concepts,coreConcepts:true,hierarchical:true};
  completed=total;status('complete',{coverage});return {nodes,coverage};
 }

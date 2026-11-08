@@ -45,7 +45,7 @@ export class GenerationQueue{
  schedule(graph,nodes,provider){
   if(!this.enabled||provider==='demo')return;this.configure(graph,provider);
   // Replace stale predictions with the next visible choices. Never recurse automatically.
-  this.queue=nodes.filter(n=>n.type!=='question'&&!n.expanded&&!n.outline?.length).slice(0,6).map(n=>({graph,id:n.id,provider,key:this.key(graph,n.id)})).filter(x=>!this.cache.has(x.key)&&!this.jobs.has(x.key));this.emit();this.pump();
+  this.queue=nodes.filter(n=>n.type!=='question'&&!n.prepared&&!n.expanded&&!Array.isArray(n.outline)).map(n=>({graph,id:n.id,provider,key:this.key(graph,n.id)})).filter(x=>!this.cache.has(x.key)&&!this.jobs.has(x.key));this.emit();this.pump();
  }
  pump(){
   clearTimeout(this.timer);if(!this.enabled||this.foreground||this.jobs.size||!this.queue.length)return;
