@@ -14,7 +14,7 @@ export function useSmoothWheel(host,mode,graphId,onMoveEnd){
   const stop=()=>{cancelAnimationFrame(frame);frame=0;finish();};
   const tick=time=>{
    const current=flow.getViewport(),dt=lastTime?Math.min(40,time-lastTime):16;lastTime=time;
-   const alpha=1-Math.exp(-dt/65);
+   const alpha=1-Math.exp(-dt/32);
    const next={x:current.x+(target.x-current.x)*alpha,y:current.y+(target.y-current.y)*alpha,zoom:current.zoom+(target.zoom-current.zoom)*alpha};
    const done=Math.abs(next.x-target.x)<.15&&Math.abs(next.y-target.y)<.15&&Math.abs(Math.log(next.zoom/target.zoom))<.0001;
    flow.setViewport(done?target:next,{duration:0});
@@ -43,3 +43,4 @@ export function useSmoothWheel(host,mode,graphId,onMoveEnd){
  },[flow,host,mode,graphId]);
  return active;
 }
+

@@ -98,6 +98,7 @@ export async function callProvider(config,context,{signal,timeoutMs,onProgress,r
    onProgress?.({stage:'waiting'});
    const model=config.model?.trim()||(config.kind==='codex'?await configuredCodexModel():'');
    const args=clientArgs(config.kind,schemaPath,model,schema,{webSearch:config.webSearch!==false&&!['inventory','coverage-audit'].includes(task)});
+   if(config.kind==='codex'&&task)args.splice(args.length-1,0,'-c','model_reasoning_effort="low"');
    const [cmd,argv]=invocation(info.path,args);const raw=await runProcess(cmd,argv,{input:system+'\n\n'+content,signal:combined,timeout,cwd,maxBytes:500000,onOutput:bytes=>onProgress?.({stage:'receiving',bytes})});
    onProgress?.({stage:'validating'});
    const response=clientText(config.kind,raw);

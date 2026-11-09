@@ -49,6 +49,8 @@ jobs:
           npm run test:browser
           node tests/readability.mjs
           node tests/interaction-update.mjs
+          node tests/ui-polish.mjs
+          node tests/drag-browser.mjs
           node tests/regressions.mjs
           npm run test:desktop
       - uses: actions/upload-artifact@v4
@@ -84,6 +86,10 @@ jobs:
           node tests/readability.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node tests/interaction-update.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node tests/ui-polish.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node tests/drag-browser.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node tests/regressions.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -157,3 +163,4 @@ jobs:
           else
             gh release create "$TAG" "$PKG" "$EXE" artifacts/release/SHA256SUMS.txt artifacts/Mac-validation.json artifacts/Windows-validation.json --target "$GITHUB_SHA" --title "知枝 $VERSION · Windows / Apple Silicon" --notes-file artifacts/notes.md --latest
           fi
+

@@ -33,7 +33,7 @@ export function mergeKnowledge(nodes){
  return [...merged.values()];
 }
 
-export async function generateComplete(config,graph,node,{signal,onProgress=()=>{},provider=callProvider,cache,concurrency}={}){
+export async function generateComplete(config,graph,node,{signal,onProgress=()=>{},onPreview=()=>{},provider=callProvider,cache,concurrency}={}){
  const stop=new AbortController();signal=signal?AbortSignal.any([signal,stop.signal]):stop.signal;
  let reused=0;
  const invoke=async(context,onProgress)=>{signal.throwIfAborted();const run=()=>retryRateLimited(()=>provider(config,context,{signal,onProgress,timeoutMs:context.generationTask?Math.max(config.timeoutMs||180000,context.generationTask==='hierarchy-synthesis'?600000:300000):undefined}),{signal,onWait:onProgress});if(!cache)return run();const result=await cache.run(config,context,run);signal.throwIfAborted();if(result.cached)reused++;return result.nodes;};
@@ -66,6 +66,8 @@ export async function generateComplete(config,graph,node,{signal,onProgress=()=>
    const extracted=await invoke({...context,generationTask:'inventory'},p=>status('reading',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
    signal.throwIfAborted();
    if(!extracted.length||extracted.some(n=>!n.sources?.length))throw new Error(material.name+'：知识点缺少教材来源，请重试');
+   const preview=(nodes,reviewed=false)=>onPreview({document:{id:material.id,name:material.name,nodes:mergeKnowledge([...indices.filter(index=>index<i).flatMap(index=>results[index]||[]),...nodes]),reviewed}});
+   preview(extracted);
    completed++;status('reviewing',detail);
    let batchNodes=extracted,reviewed=false;
    for(let round=1;round<=8;round++){
@@ -77,9 +79,11 @@ export async function generateComplete(config,graph,node,{signal,onProgress=()=>
     const combined=mergeKnowledge([...batchNodes,...missing]);
     if(JSON.stringify(combined)===JSON.stringify(batchNodes))throw new Error(material.name+'：模型复核反复返回相同内容，尚未完成，请重试');
     batchNodes=combined;
+    preview(batchNodes);
    }
    if(!reviewed)throw new Error(material.name+'：仍有新增遗漏，未把部分结果当作完成，请拆分资料后重试');
    results[i]=batchNodes;scannedChunks+=chunks.length;completed++;status('reviewed',detail);
+   preview(batchNodes,i===indices.at(-1));
    }
    const material=batches[indices[0]].material;
    const candidates=mergeKnowledge(indices.flatMap(i=>results[i])).filter(n=>n.type!=='example'&&n.relation!=='举例');
@@ -101,3 +105,4 @@ export async function generateComplete(config,graph,node,{signal,onProgress=()=>
  const coverage={files:materials.length,chunks:scannedChunks,batches:batches.length,reviewedBatches:batches.length,auditPasses,concepts,coreConcepts:true,hierarchical:true};
  completed=total;status('complete',{coverage});return {nodes,coverage};
 }
+
