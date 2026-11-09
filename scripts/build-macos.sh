@@ -34,11 +34,20 @@ for size in 16 32 128 256 512; do
   sips -z "$double" "$double" "$WORK/icon.png" --out "$WORK/AppIcon.iconset/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$WORK/AppIcon.iconset" -o "$RES/AppIcon.icns"
+node --input-type=module - "$RES" <<'JS'
+import fs from 'node:fs';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+const stage=process.argv[2];
+const sha=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+fs.writeFileSync(path.join(stage,'backend','build-info.json'),JSON.stringify({commit:process.env.GITHUB_SHA||null,iconPngSha256:sha('public/app-icon.png'),iconIcnsSha256:sha(path.join(stage,'AppIcon.icns'))},null,2));
+JS
 codesign --force --sign - "$RES/zhizhi-keychain"
 node scripts/package-desktop.mjs darwin arm64 "$RES" "$WORK/desktop" "$RES/AppIcon.icns"
 cp -R "$WORK/desktop/Zhizhi-darwin-arm64/Zhizhi.app" "$APP"
 RES="$APP/Contents/Resources"
 codesign --verify --deep --strict "$APP"
+node scripts/verify-macos-bundle.mjs "$APP"
 # Test the actual bundled runtime before packaging.
 [ "$("$RES/runtime/bin/node" -p 'process.platform+"/"+process.arch')" = 'darwin/arm64' ]
 if ! "$APP/Contents/MacOS/Zhizhi" --smoke-test; then
@@ -77,4 +86,5 @@ if [ -n "${MAC_NOTARY_PROFILE:-}" ]; then
 fi
 (cd release && shasum -a 256 "Zhizhi-${VERSION}-macos-arm64.pkg" > SHA256SUMS.txt)
 echo "Built: $OUTPUT"
+
 

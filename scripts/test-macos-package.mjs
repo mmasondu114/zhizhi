@@ -23,6 +23,7 @@ async function start(){
 }
 try{
  await install();report.checks.push('real installer completed');
+ await exec(process.execPath,[path.join(root,'scripts','verify-macos-bundle.mjs'),app],{timeout:60000});report.checks.push('installed signatures and current application icon verified');
  assert.equal((await exec(runtime,['-p','process.platform+"/"+process.arch'])).stdout.trim(),'darwin/arm64');report.checks.push('bundled native ARM runtime');
  await exec(path.join(app,'Contents','MacOS','Zhizhi'),['--smoke-test'],{timeout:60000});report.checks.push('desktop window started server');
  await start();let boot=await fetch('http://127.0.0.1:14325/api/bootstrap').then(r=>r.json());let headers={'Content-Type':'application/json','x-tree-token':boot.token};
@@ -38,3 +39,4 @@ try{
  report.passed=true;
 }catch(error){report.passed=false;report.error=error.message;process.exitCode=1;}
 finally{await stop();await fs.mkdir(path.join(root,'test-results'),{recursive:true});await fs.writeFile(path.join(root,'test-results','macos-install.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));}
+

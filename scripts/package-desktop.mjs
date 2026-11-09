@@ -26,5 +26,12 @@ async function repairResourceLinks({buildPath}){
  for(const source of resources){const target=path.join(targetRoot,path.basename(source));if((await fs.stat(target)).isDirectory())await walk(target);}
  console.log('Verified internal resource links: '+repaired);
 }
-const results=await packager({dir:shellDir,out,name:'Zhizhi',executableName:'Zhizhi',platform,arch,electronVersion:pkg.devDependencies.electron,appVersion:pkg.version,appBundleId:'io.github.mmasondu114.zhizhi',icon,asar:true,prune:false,overwrite:true,extraResource:resources,afterCopyExtraResources:[repairResourceLinks],...(platform==='darwin'?{osxSign:{continueOnError:false,identity:process.env.MAC_APP_SIGN_IDENTITY||'-',identityValidation:!!process.env.MAC_APP_SIGN_IDENTITY,hardenedRuntime:!!process.env.MAC_APP_SIGN_IDENTITY,gatekeeperAssess:false},extendInfo:{CFBundleDisplayName:'知枝',LSMinimumSystemVersion:'14.0'}}:{win32metadata:{CompanyName:'Zhizhi',FileDescription:'知枝 · 交互式知识树',ProductName:'知枝'}})});
+// osx-sign 2.x reads hardenedRuntime from optionsForFile, not from the
+// top-level options. Ad-hoc signatures have no Team ID and cannot satisfy
+// hardened runtime library validation, even when codesign --verify succeeds.
+const developerIdSigned=!!process.env.MAC_APP_SIGN_IDENTITY&&process.env.MAC_APP_SIGN_IDENTITY!=='-';
+// Explicitly clear inherited flags when replacing a pre-signed Electron binary.
+const macFileSignOptions=()=>developerIdSigned?{hardenedRuntime:true}:{hardenedRuntime:false,additionalArguments:['--options','0']};
+const results=await packager({dir:shellDir,out,name:'Zhizhi',executableName:'Zhizhi',platform,arch,electronVersion:pkg.devDependencies.electron,appVersion:pkg.version,appBundleId:'io.github.mmasondu114.zhizhi',icon,asar:true,prune:false,overwrite:true,extraResource:resources,afterCopyExtraResources:[repairResourceLinks],...(platform==='darwin'?{osxSign:{continueOnError:false,identity:process.env.MAC_APP_SIGN_IDENTITY||'-',identityValidation:developerIdSigned,optionsForFile:macFileSignOptions,gatekeeperAssess:false},extendInfo:{CFBundleDisplayName:'知枝',LSMinimumSystemVersion:'14.0'}}:{win32metadata:{CompanyName:'Zhizhi',FileDescription:'知枝 · 交互式知识树',ProductName:'知枝'}})});
 console.log('Desktop bundle: '+results[0]);
+
