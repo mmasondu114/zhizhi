@@ -7,7 +7,16 @@ import assert from 'node:assert/strict';
 import {createApp} from '../server/index.js';
 import {makeGraph} from '../src/demo.js';
 const root=path.resolve(import.meta.dirname,'..');await fs.mkdir(path.join(root,'test-results'),{recursive:true});const dir=await fs.mkdtemp(path.join(os.tmpdir(),'tree-regression-'));const port=14320,base=`http://127.0.0.1:${port}`;
-let delay=80,lastContext;const mock=http.createServer(async(req,res)=>{let text='';for await(const b of req)text+=b;lastContext=JSON.parse(JSON.parse(text).messages[1].content);setTimeout(()=>{if(!res.destroyed)res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes:lastContext.generationTask==='coverage-audit'?[]:[{title:'标准差的来源',summary:'教材说明标准差描述离散程度',detail:'引用已上传片段；其他内容不作为教材。',type:'knowledge',relation:'解释',formula:'',example:'',sources:lastContext.materials.map(m=>m.id).slice(0,1)}]})}}]}));},delay);});await new Promise(r=>mock.listen(0,'127.0.0.1',r));
+let delay=80,lastContext;const mock=http.createServer(async(req,res)=>{
+ let text='';for await(const b of req)text+=b;
+ const context=JSON.parse(JSON.parse(text).messages[1].content);lastContext=context;
+ // Hierarchy synthesis receives audited candidates, not raw material chunks.
+ // Preserve their real source IDs instead of returning an ungrounded topic.
+ const nodes=context.generationTask==='coverage-audit'?[]:
+  context.generationTask==='hierarchy-synthesis'?context.candidates:
+  [{title:'标准差的来源',summary:'教材说明标准差描述离散程度',detail:'引用已上传片段；其他内容不作为教材。',type:'knowledge',relation:'解释',formula:'',example:'',sources:context.materials.map(m=>m.id).slice(0,1)}];
+ setTimeout(()=>{if(!res.destroyed)res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes})}}]}));},delay);
+});await new Promise(r=>mock.listen(0,'127.0.0.1',r));
 const server=(await createApp({port,dataDir:dir})).listen(port,'127.0.0.1');await new Promise(r=>server.once('listening',r));const boot=await fetch(base+'/api/bootstrap').then(r=>r.json());const headers={'Content-Type':'application/json','x-tree-token':boot.token};
 async function api(url,method='GET',body){const r=await fetch(base+'/api'+url,{method,headers,...(body?{body:JSON.stringify(body)}:{})});if(!r.ok)throw new Error(await r.text());return r.json();}
 const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||(process.platform==='win32'?'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe':chromium.executablePath()),headless:true});const page=await browser.newPage({viewport:{width:1440,height:950}});page.setDefaultTimeout(12000);const report=[];
@@ -22,4 +31,5 @@ try{
  await check('touch pinch changes zoom scale',async()=>{const g=makeGraph();await api('/graphs/'+g.id,'PUT',g);const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const touch=await ctx.newPage();touch.setDefaultTimeout(10000);try{await touch.goto(base);await touch.getByRole('button',{name:'适应全部'}).tap();await touch.waitForTimeout(400);const cd=await ctx.newCDPSession(touch);const before=await touch.locator('.zoom-value').textContent();await cd.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:130,y:300,id:1},{x:230,y:300,id:2}]});await touch.waitForTimeout(100);for(let i=1;i<=7;i++){await cd.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:130-i*7,y:300,id:1},{x:230+i*7,y:300,id:2}]});await touch.waitForTimeout(30);}await cd.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await touch.waitForTimeout(200);assert.notEqual(await touch.locator('.zoom-value').textContent(),before);}finally{await ctx.close();}});
 }finally{await fs.writeFile(path.join(root,'test-results','regressions.json'),JSON.stringify(report,null,2));await browser.close();server.closeAllConnections();mock.closeAllConnections();await Promise.all([new Promise(r=>server.close(r)),new Promise(r=>mock.close(r))]);await fs.rm(dir,{recursive:true,force:true});}
 if(report.some(r=>!r.passed))process.exitCode=1;
+
 
