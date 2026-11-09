@@ -1,6 +1,7 @@
 import {readProviderResponse} from './streaming.js';
+import {REASONING_LEVELS} from '../shared/model-options.js';
 import {macClientCandidates} from './platform.js';
-import {configuredCodexModel,clientExitMessage} from './client-config.js';
+import {resolveCodexConfig,clientExitMessage} from './client-config.js';
 import {spawn} from 'node:child_process';
 import {existsSync,readdirSync,statSync} from 'node:fs';
 import fs from 'node:fs/promises';
@@ -47,9 +48,10 @@ export function findClient(kind,custom=''){
  if(kind==='claude')candidates.push(path.join(roam,'npm/node_modules/@anthropic-ai/claude-code/cli.js'));
  return candidates.find(p=>existsSync(p))||null;
 }
-export function clientArgs(kind,schemaPath,model='',schema=outputSchema,{webSearch=false}={}){
+export function clientArgs(kind,schemaPath,model='',schema=outputSchema,{webSearch=false,reasoningEffort=''}={}){
  const args=kind==='codex'?['exec','--skip-git-repo-check','--ignore-user-config','--ignore-rules','--sandbox','read-only','--ephemeral','--json','--output-schema',schemaPath,'-c','approval_policy="never"','-c','features.shell_tool=false','-c','features.apps=false','-c','features.multi_agent=false','-c','project_doc_max_bytes=0','-c','mcp_servers={}']:['-p','--output-format','json','--json-schema',JSON.stringify(schema),'--tools','','--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--setting-sources','','--settings','{"disableAllHooks":true}','--no-session-persistence'];
  if(kind==='codex'){if(webSearch)args.unshift('--search');else args.push('-c','web_search="disabled"');}
+ if(kind==='codex'&&REASONING_LEVELS.some(level=>level.id===reasoningEffort))args.push('-c','model_reasoning_effort='+JSON.stringify(reasoningEffort));
  if(model)args.push('--model',model);if(kind==='codex')args.push('-');return args;
 }
 export function clientText(kind,raw){
@@ -96,9 +98,8 @@ export async function callProvider(config,context,{signal,timeoutMs,onProgress,r
   const cwd=await fs.mkdtemp(path.join(os.tmpdir(),'knowledge-tree-'));const schemaPath=path.join(cwd,'schema.json');await fs.writeFile(schemaPath,JSON.stringify(schema));
   try{
    onProgress?.({stage:'waiting'});
-   const model=config.model?.trim()||(config.kind==='codex'?await configuredCodexModel():'');
-   const args=clientArgs(config.kind,schemaPath,model,schema,{webSearch:config.webSearch!==false&&!['inventory','coverage-audit'].includes(task)});
-   if(config.kind==='codex'&&task)args.splice(args.length-1,0,'-c','model_reasoning_effort="low"');
+   const resolved=await resolveCodexConfig(config),model=resolved.model;
+   const args=clientArgs(config.kind,schemaPath,model,schema,{reasoningEffort:resolved.reasoningEffort,webSearch:config.webSearch!==false&&!['inventory','coverage-audit'].includes(task)});
    const [cmd,argv]=invocation(info.path,args);const raw=await runProcess(cmd,argv,{input:system+'\n\n'+content,signal:combined,timeout,cwd,maxBytes:500000,onOutput:bytes=>onProgress?.({stage:'receiving',bytes})});
    onProgress?.({stage:'validating'});
    const response=clientText(config.kind,raw);

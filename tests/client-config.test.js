@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {configuredCodexModel,clientExitMessage} from '../server/client-config.js';
+import {configuredCodexModel,configuredCodexPreferences,resolveCodexConfig,clientExitMessage} from '../server/client-config.js';
 import {callProvider,runProcess} from '../server/providers.js';
 import {macClientCandidates} from '../server/platform.js';
+import {REASONING_LEVELS,CODEX_MODELS} from '../shared/model-options.js';
 
 test('Mac detects the current desktop CLI before the legacy desktop bundle',()=>{
  const candidates=macClientCandidates('codex','/Users/test');
@@ -35,7 +36,10 @@ test('Codex request inherits configured model, explicit model wins, tools remain
  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'zhizhi-client-'));
  const old=process.env.CODEX_HOME;process.env.CODEX_HOME=dir;
  try{
-  await fs.writeFile(path.join(dir,'config.toml'),'model="configured-model"\n[hooks]\ncommand="must-not-run"');
+  await fs.writeFile(path.join(dir,'config.toml'),'model="configured-model"\nmodel_reasoning_effort="high"\n[hooks]\ncommand="must-not-run"');
+  assert.deepEqual(await configuredCodexPreferences(dir),{model:'configured-model',reasoningEffort:'high'});
+  assert.equal((await resolveCodexConfig({kind:'codex',reasoningEffort:''})).reasoningEffort,'high');
+  assert.equal((await resolveCodexConfig({kind:'codex',model:'override',reasoningEffort:'low'})).model,'override');
   const client=path.join(dir,'fake-codex.mjs');
   await fs.writeFile(client,`const args=process.argv.slice(2);
 if(args.includes('--version'))console.log('codex test');
@@ -43,12 +47,19 @@ else if(args.includes('--help'))console.log('--output-schema --sandbox --ignore-
 else{
  if(!args.includes('--ignore-user-config')||!args.includes('features.shell_tool=false')||!args.includes('mcp_servers={}'))process.exit(2);
  const model=args[args.indexOf('--model')+1];
- console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({nodes:[{title:model,summary:'summary',detail:'detail',type:'knowledge',relation:'解释'}]})}}));
+ const effort=args.find(a=>a.startsWith('model_reasoning_effort='))?.split('=')[1]||'default';
+ console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({nodes:[{title:model,summary:'summary',detail:effort,type:'knowledge',relation:'解释'}]})}}));
 }`);
   for(const [model,expected]of [['','configured-model'],['chosen-model','chosen-model']]){
    const result=await callProvider({kind:'codex',clientPath:client,model},{materials:[]});
    assert.equal(result[0].title,expected);
+   assert.equal(result[0].detail,'"low"');
   }
+  for(const {id:reasoningEffort}of REASONING_LEVELS){for(const generationTask of ['inventory','coverage-audit','hierarchy-synthesis']){
+   const result=await callProvider({kind:'codex',clientPath:client,model:'gpt-6.1-sol',reasoningEffort},{generationTask,materials:[]});
+   assert.equal(result[0].detail,JSON.stringify(reasoningEffort),'every stage must use the selected reasoning level');
+  }}
+  for(const {id:model}of CODEX_MODELS){const result=await callProvider({kind:'codex',clientPath:client,model,reasoningEffort:''},{materials:[]});assert.equal(result[0].title,model);assert.equal(result[0].detail,'"high"');}
  }finally{if(old===undefined)delete process.env.CODEX_HOME;else process.env.CODEX_HOME=old;await fs.rm(dir,{recursive:true,force:true});}
 });
 
