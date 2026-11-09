@@ -51,7 +51,7 @@ const GraphCanvas=memo(function GraphCanvas({initialNodes,edges,wheelMode,graphI
  const flow=useReactFlow(),overview=useStore(s=>s.transform[2]<.3);
  const shownEdges=useMemo(()=>overview?animatedEdges.map(e=>({...e,label:undefined})):animatedEdges,[animatedEdges,overview]);
  useEffect(()=>{drag.current=null;setHome(null);},[graphId]);
- function updateHome(n){const state=drag.current;if(!state||state.id!==n.id)return false;const distance=Math.hypot(n.position.x-state.origin.x,n.position.y-state.origin.y)*flow.getZoom(),near=distance<=(state.near?48:32);if(near!==state.near){state.near=near;setHome(near?{...state}:null);}return near;}
+ function updateHome(n){const state=drag.current;if(!state||state.id!==n.id)return false;const distance=Math.hypot(n.position.x-state.origin.x,n.position.y-state.origin.y)*flow.getZoom(),near=distance<=(state.near?20:14);if(near!==state.near){state.near=near;setHome(near?{...state}:null);}return near;}
  return <div className={'canvas-gesture-host '+(selectionBox?'is-box-selecting':'')} ref={host}>
   <ReactFlow {...props} nodes={nodes} edges={shownEdges} onNodesChange={onNodesChange}
    onNodeDragStart={(e,n)=>{beginDrag(n.id);const original=initialNodes.find(x=>x.id===n.id)||n;drag.current={id:n.id,origin:{...original.position},height:nodeHeight(original.data.node),near:false};updateHome(n);onNodeDragStart?.(e,n);}}

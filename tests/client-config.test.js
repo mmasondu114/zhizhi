@@ -12,7 +12,7 @@ test('Mac detects the current desktop CLI before the legacy desktop bundle',()=>
  const current='/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex';
  assert.ok(candidates.includes(current));
  assert.ok(candidates.indexOf(current)<candidates.indexOf('/Applications/Codex.app/Contents/Resources/codex'));
- assert.ok(candidates.includes('/Users/test/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex'));
+ assert.ok(candidates.includes(path.join('/Users/test','Applications','ChatGPT.app','Contents','Resources','codex-cli','bin','codex')));
  assert.ok(!macClientCandidates('claude','/Users/test').includes(current));
 });
 

@@ -22,7 +22,8 @@ try{
   await page.mouse.move(start.x,start.y);await page.mouse.down();let grabOffset,lastX=original.x;
   for(const dx of [12,28,44,70,110,150]){await page.mouse.move(start.x+dx,start.y);if(dx===44)await card.locator('h3').evaluate(e=>e.style.paddingBottom='8px');await page.waitForTimeout(45);const actual=await card.boundingBox();grabOffset??=actual.x-original.x-dx;assert.ok(actual.x>=lastX-1&&Math.abs(actual.x-original.x-dx-grabOffset)<3,'drag must track continuously after threshold at zoom '+zoom+': '+JSON.stringify({dx,actual:actual.x,expected:original.x+dx+grabOffset}));lastX=actual.x;}
   assert.equal(await page.getByTestId('node-home-target').count(),0);
-  await page.mouse.move(start.x+20,start.y,{steps:8});await page.getByTestId('node-home-target').waitFor();const guide=await page.getByTestId('node-home-target').boundingBox();assert.ok(Math.abs(guide.x-(original.x-6))<3);await page.screenshot({path:path.join(root,'test-results/drag-magnet-'+zoom+'.png')});
+  await page.mouse.move(start.x+26-grabOffset,start.y,{steps:8});assert.equal(await page.getByTestId('node-home-target').count(),0,'26 screen pixels away must not attract');
+  await page.mouse.move(start.x+8-grabOffset,start.y,{steps:8});await page.getByTestId('node-home-target').waitFor();assert.equal(await page.getByTestId('node-home-target').textContent(),'');const guide=await page.getByTestId('node-home-target').boundingBox();assert.ok(Math.abs(guide.x-(original.x-6))<3);await page.screenshot({path:path.join(root,'test-results/drag-magnet-'+zoom+'.png')});
   await page.mouse.up();await page.waitForTimeout(350);assert.equal(await page.getByTestId('node-home-target').count(),0);assert.deepEqual(await saved(),g.nodes[0].position,'drop near original returns exactly');
   const next=await card.boundingBox(),point={x:next.x+60*zoom,y:next.y+65*zoom};await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x+160,point.y+60,{steps:12});assert.equal(await page.getByTestId('node-home-target').count(),0);const released=await card.boundingBox();await page.mouse.up();await page.waitForTimeout(350);const free=await saved();assert.ok(Math.abs(free.x-(g.nodes[0].position.x+(released.x-next.x)/zoom))<2);assert.ok(Math.abs(free.y-(g.nodes[0].position.y+(released.y-next.y)/zoom))<2);
   // The next drag uses the most recently saved position as its home.
@@ -30,3 +31,4 @@ try{
  }
  assert.equal(generates,0);assert.deepEqual(errors,[]);console.log('PASS pointer tracking during selection/measurement updates, visible home magnet, exact return, free drop, refreshed origin and zoom-independent attraction');
 }catch(e){await page.screenshot({path:path.join(root,'test-results/drag-failure.png')}).catch(()=>{});throw e;}finally{await browser.close();app.locals.shutdown();server.closeAllConnections();await new Promise(r=>server.close(r));await fs.rm(dataDir,{recursive:true,force:true});}
+
