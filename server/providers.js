@@ -1,5 +1,6 @@
 import {readProviderResponse} from './streaming.js';
 import {macClientCandidates} from './platform.js';
+import {configuredCodexModel,clientExitMessage} from './client-config.js';
 import {spawn} from 'node:child_process';
 import {existsSync,readdirSync,statSync} from 'node:fs';
 import fs from 'node:fs/promises';
@@ -28,7 +29,7 @@ export function runProcess(command,args,{input='',signal,timeout=120000,cwd,maxB
   child.stdout.on('data',b=>{if(done||terminationError)return;out+=b.toString();onOutput?.(out.length);if(out.length>maxBytes){terminate(new Error('客户端输出过长'));}});
   child.stderr.on('data',b=>{err=(err+b.toString()).slice(-4000);});
   child.on('error',()=>finish(new Error('客户端未安装或无法启动')));
-  child.on('close',code=>finish(code?new Error(/429|rate.?limit|too many requests/i.test(err+' '+out)?'429：请求过多，请稍后重试':`客户端退出（${code}）；请检查官方客户端登录、网络和模型配置`):null));
+  child.on('close',code=>finish(code?new Error(clientExitMessage(code,err,out)):null));
   child.stdin.on('error',()=>{});if(signal?.aborted){abort();return;}child.stdin.end(input);
  });
 }
@@ -95,7 +96,8 @@ export async function callProvider(config,context,{signal,timeoutMs,onProgress,r
   const cwd=await fs.mkdtemp(path.join(os.tmpdir(),'knowledge-tree-'));const schemaPath=path.join(cwd,'schema.json');await fs.writeFile(schemaPath,JSON.stringify(schema));
   try{
    onProgress?.({stage:'waiting'});
-   const args=clientArgs(config.kind,schemaPath,config.model,schema,{webSearch:config.webSearch!==false&&!['inventory','coverage-audit'].includes(task)});
+   const model=config.model?.trim()||(config.kind==='codex'?await configuredCodexModel():'');
+   const args=clientArgs(config.kind,schemaPath,model,schema,{webSearch:config.webSearch!==false&&!['inventory','coverage-audit'].includes(task)});
    const [cmd,argv]=invocation(info.path,args);const raw=await runProcess(cmd,argv,{input:system+'\n\n'+content,signal:combined,timeout,cwd,maxBytes:500000,onOutput:bytes=>onProgress?.({stage:'receiving',bytes})});
    onProgress?.({stage:'validating'});
    const response=clientText(config.kind,raw);
@@ -104,4 +106,5 @@ export async function callProvider(config,context,{signal,timeoutMs,onProgress,r
  }
  throw new Error('未选择可用的模型提供方');
 }
+
 
