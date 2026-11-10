@@ -23,7 +23,7 @@ const page=await browser.newPage({viewport:{width:1440,height:950}});page.setDef
 async function check(name,fn){try{await fn();report.push({name,passed:true});console.log('PASS '+name);}catch(e){report.push({name,passed:false,error:e.message});console.log('FAIL '+name+' '+e.message);}}
 const intersects=(a,b)=>a.x<b.x+b.width-.1&&a.x+a.width>b.x+.1&&a.y<b.y+b.height-.1&&a.y+a.height>b.y+.1;
 try{
- await page.goto(base);await page.getByRole('button',{name:'适应全部'}).waitFor();await page.waitForTimeout(450);
+ await page.addInitScript(()=>localStorage.setItem('zhizhi-concept-mode','panel'));await page.goto(base);await page.getByRole('button',{name:'适应全部'}).waitFor();await page.waitForTimeout(450);
  await check('three levels: no node or relationship label overlap',async()=>{await page.setViewportSize({width:2400,height:1100});await page.getByRole('button',{name:'适应全部'}).click();await page.evaluate(()=>document.fonts.ready);
  const geometry=await page.waitForFunction(count=>{
   const cards=[...document.querySelectorAll('.knowledge-node')].map(e=>e.getBoundingClientRect().toJSON());

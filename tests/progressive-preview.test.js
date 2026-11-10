@@ -1,3 +1,4 @@
+import {introduction} from './lesson-fixture.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateComplete} from '../server/complete-generation.js';
@@ -11,6 +12,7 @@ test('validated concepts are readable before audit finishes; omissions update th
  const graph=fixture(),previews=[];let releaseAudit,auditStarted,round=0,finished=false;
  const waiting=new Promise(r=>auditStarted=r),gate=new Promise(r=>releaseAudit=r);
  const result=generateComplete({},graph,graph.nodes[0],{onPreview:p=>previews.push(p),provider:async(_,context)=>{
+  if(context.generationTask==='chapter-introduction')return [introduction(context)];
   if(context.generationTask==='inventory')return [node('均值')];
   if(context.generationTask==='coverage-audit'){auditStarted();await gate;return round++===0?[node('标准误')]:[];}
   return context.candidates;

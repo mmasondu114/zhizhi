@@ -4,10 +4,14 @@ export const types=['knowledge','question','answer','formula','example'];
 export const relations=['需要','解释','组成','步骤','条件','区别','提问','回答','举例','原理'];
 const text=(max)=>z.string().trim().min(1).max(max);
 export const webSource=z.object({title:text(200),url:z.string().max(2000).url().refine(s=>{try{return new URL(s).protocol==='https:'&&!new URL(s).username&&!new URL(s).password;}catch{return false;}})});
-export const generatedNode=z.object({title:text(100),summary:text(320),type:z.enum(types).default('knowledge'),relation:z.enum(relations).default('解释'),detail:text(10000),formula:z.string().max(2000).optional().default(''),example:z.string().max(4000).optional().default(''),sources:z.array(z.string().max(100)).max(8).optional().default([]),webSources:z.array(webSource).max(6).optional()});
+export const lessonTerm=z.object({name:text(160),english:z.string().max(240),definition:text(1600)});
+export const generatedNode=z.object({lessonOverview:z.string().max(4000).optional(),terms:z.array(lessonTerm).max(100).optional(),title:text(100),summary:text(320),type:z.enum(types).default('knowledge'),relation:z.enum(relations).default('解释'),detail:text(10000),formula:z.string().max(2000).optional().default(''),example:z.string().max(4000).optional().default(''),sources:z.array(z.string().max(100)).max(8).optional().default([]),webSources:z.array(webSource).max(6).optional()});
 export const preparedNode=generatedNode.extend({prepared:z.boolean().optional(),outline:z.array(generatedNode).optional()});
 export const generationSchema=z.object({nodes:z.array(preparedNode).min(1)});
 export const outputSchema={type:'object',additionalProperties:false,properties:{nodes:{type:'array',minItems:1,items:{type:'object',additionalProperties:false,properties:{title:{type:'string'},summary:{type:'string'},type:{type:'string',enum:types},relation:{type:'string',enum:relations},detail:{type:'string'},formula:{type:'string'},example:{type:'string'},sources:{type:'array',items:{type:'string'}},webSources:{type:'array',items:{type:'object',additionalProperties:false,properties:{title:{type:'string'},url:{type:'string'}},required:['title','url']}}},required:['title','summary','type','relation','detail','formula','example','sources','webSources']}}},required:['nodes']};
+const lessonProperties={lessonOverview:{type:'string'},terms:{type:'array',items:{type:'object',additionalProperties:false,properties:{name:{type:'string'},english:{type:'string'},definition:{type:'string'}},required:['name','english','definition']}}};
+Object.assign(outputSchema.properties.nodes.items.properties,lessonProperties);
+outputSchema.properties.nodes.items.required.push('lessonOverview','terms');
 export const focusedSchema=outputSchema;
 export const hierarchySchema={...focusedSchema,properties:{nodes:{...focusedSchema.properties.nodes,items:{...outputSchema.properties.nodes.items,properties:{...outputSchema.properties.nodes.items.properties,outline:{type:'array',items:outputSchema.properties.nodes.items}},required:[...outputSchema.properties.nodes.items.required,'outline']}}}};
 export function parseGeneration(raw,allowedSources=[],{allowEmpty=false}={}){

@@ -1,7 +1,7 @@
 import UpdatePanel from './UpdatePanel';
 import React,{useState} from 'react';
 import {CODEX_MODELS,REASONING_LEVELS} from '../shared/model-options';
-export default function SettingsForm({settings,clients,onSave,notify,refreshClients,api,onConnectionChange=()=>{}}){
+export default function SettingsForm({settings,clients,onSave,notify,refreshClients,api,onConnectionChange=()=>{},conceptMode='popup',onConceptModeChange=()=>{}}){
  const [kind,setKind]=useState(settings.selected==='demo'?'codex':settings.selected);
  const [drafts,setDrafts]=useState({}),[working,setWorking]=useState(false),[result,setResult]=useState('');
  const [customModel,setCustomModel]=useState(false);
@@ -11,7 +11,7 @@ export default function SettingsForm({settings,clients,onSave,notify,refreshClie
  const save=()=>onSave({selected:kind,...(kind!=='demo'?{provider:{...values,...(kind==='codex'?{reasoningEffort:values.reasoningEffort??'low'}:{}),kind,hasKey:undefined,secret:undefined}}:{})});
  const connect=async e=>{e.preventDefault();setWorking(true);setResult(kind==='demo'?'正在切换…':'正在测试连接，通常需要十几秒…');try{await save();onConnectionChange({kind,status:kind==='demo'?'disconnected':'connecting'});if(kind!=='demo'){const r=await api('/test',{method:'POST',body:JSON.stringify({kind})});onConnectionChange(r.connection||{kind,status:'connected'});setResult('已连接 · '+r.message);}else setResult('已使用离线示例，不调用 AI');change('key','');}catch(e){onConnectionChange({kind,status:'error'});setResult('连接未完成：'+e.message);}finally{setWorking(false);}};
  return <form className="settings-content simple-settings" onSubmit={connect}>
- <p className="settings-intro">选一种方式，连接后就能点击知识点继续探索。</p>
+ <fieldset className="lesson-display-settings"><legend>概念讲解展示方式</legend><label><input type="radio" name="concept-mode" value="popup" checked={conceptMode==='popup'} onChange={()=>onConceptModeChange('popup')}/>弹窗页面（默认）</label><label><input type="radio" name="concept-mode" value="panel" checked={conceptMode==='panel'} onChange={()=>onConceptModeChange('panel')}/>右侧面板</label><p className="muted">选择后自动保存。弹窗可点击外部空白、按 Esc 或 Ctrl+Z，或点击 × 返回知识树。</p></fieldset><p className="settings-intro">选一种方式，连接后就能点击知识点继续探索。</p>
  <div className="connection-choices" role="tablist" aria-label="连接方式">
  {[['client','本机客户端'],['api','API 接入'],['demo','离线示例']].map(([g,label])=><button type="button" role="tab" aria-selected={group===g} key={g} disabled={working} onClick={()=>choose(g==='client'?'codex':g==='api'?'openai':'demo')}>{label}</button>)}
  </div>

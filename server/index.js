@@ -1,3 +1,4 @@
+import {installLessons} from './lessons.js';
 import {resolveCodexConfig} from './client-config.js';
 import {REASONING_LEVELS} from '../shared/model-options.js';
 import {generationCache} from './generation-cache.js';
@@ -47,6 +48,7 @@ export async function createApp({dataDir=defaultDataDir({root}),port=Number(proc
  const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:20*1024*1024,files:1}});
  app.post('/api/material',upload.single('file'),async(req,res)=>{if(!req.file)throw new Error('请选择文件');res.json(await parseMaterial(Buffer.from(req.file.originalname,'latin1').toString('utf8'),req.file.buffer));});
  app.post('/api/material/text',async(req,res)=>{const b=z.object({name:z.string().max(255),text:z.string().min(1).max(2000000)}).parse(req.body);const id=crypto.randomUUID();res.json({id,name:b.name||'粘贴的教材',chunks:chunkText(b.text,id)});});
+ installLessons(app,{getSettings:()=>settings,requests,configFor:async kind=>({...settings.providers[kind],key:await unprotect(settings.providers[kind]?.secret)})});
  installExercises(app,{getSettings:()=>settings,requests,configFor:async kind=>({...settings.providers[kind],key:await unprotect(settings.providers[kind]?.secret)})});
  app.post('/api/generate',async(req,res)=>{
   const body=z.object({requestId:z.string().uuid(),graph:z.unknown(),nodeId:z.string(),provider:z.enum(['openai','anthropic','codex','claude'])}).parse(req.body);const graph=validateGraph(body.graph);const node=graph.nodes.find(n=>n.id===body.nodeId);if(!node)throw new Error('节点已删除');

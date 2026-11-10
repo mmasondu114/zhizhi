@@ -49,10 +49,10 @@ export async function generateComplete(config,graph,node,{signal,onProgress=()=>
  }
  const materials=node.id===graph.root?graph.materials:graph.materials.filter(m=>node.materialIds.includes(m.id));
  if(!materials.length)throw new Error('该章节的教材已移除，请重新梳理教材');
- const batches=materialBatches(materials),total=batches.length*2+materials.length+2;let completed=0;
+ const batches=materialBatches(materials),total=batches.length*2+materials.length*2+2;let completed=0;
  const status=(stage,extra={})=>onProgress({stage,percent:Math.floor(completed/total*100),completed,total,reused,...extra});
  status('planning');signal?.throwIfAborted();completed++;status('reading');
- const outlines=new Map();
+ const outlines=new Map(),introductions=new Map();
  let scannedChunks=0,auditPasses=0;
  const results=new Array(batches.length),groups=materials.map(material=>batches.map((b,i)=>b.material.id===material.id?i:-1).filter(i=>i>=0));const lanes=Math.max(1,Math.min(Math.floor(concurrency)||groups.length,groups.length));let cursor=0,failure;
  async function worker(){
@@ -90,15 +90,18 @@ export async function generateComplete(config,graph,node,{signal,onProgress=()=>
    if(!candidates.length)throw new Error(material.name+'：未提炼到核心概念');
    const detail={file:material.name,parallel:lanes};status('assembling',detail);
    const prepared=await invoke({...base,generationTask:'hierarchy-synthesis',hierarchyVersion:2,document:material.name,materials:[],allowedSourceIds:material.chunks.map(c=>c.id),candidates},p=>status('assembling',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
-   function clean(nodes){if(!nodes.length)throw new Error(material.name+'：未整理到核心主题，请重试');return nodes.map(n=>{if(n.type==='example'||n.relation==='举例'||!n.sources.length)throw new Error(material.name+'：主题应为有教材依据的核心知识');const {outline,...leaf}=n;return {...leaf,prepared:true,example:'',...(outline?.length?{outline:clean(outline)}:{})};});}
-   outlines.set(material.id,clean(prepared));completed++;status('reviewed',detail);
+   function clean(nodes){if(!nodes.length)throw new Error(material.name+'：未整理到核心主题，请重试');return nodes.map(n=>{if(n.type==='example'||n.relation==='举例'||!n.sources.length)throw new Error(material.name+'：主题应为有教材依据的核心知识');const {outline,...leaf}=n;return {...leaf,prepared:true,...(outline?.length?{outline:clean(outline)}:{})};});}
+   outlines.set(material.id,clean(prepared));completed++;status('assembling',detail);
+   const intro=await invoke({...base,generationTask:'chapter-introduction',document:material.name,materials:[],allowedSourceIds:material.chunks.map(c=>c.id),candidates:prepared},p=>status('assembling',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
+   if(intro.length!==1||!intro[0].lessonOverview?.trim()||!intro[0].terms?.length||!intro[0].sources?.length)throw new Error(material.name+'：章节概括或专有名词不完整，请重试');
+   introductions.set(material.id,intro[0]);completed++;status('reviewed',detail);
   }
  }
  await Promise.all(Array.from({length:lanes},()=>worker().catch(error=>{if(!failure)failure=error;stop.abort();})));
  if(failure)throw failure;
  signal.throwIfAborted();status('validating');
  const ordered=[...materials].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
- const nodes=node.id===graph.root?ordered.map(material=>{const outline=outlines.get(material.id);return {title:material.name.replace(/\.pdf$/i,'').slice(0,100),summary:outline.length+' 个核心主题 · 点击逐层展开',detail:'先选择这份教材中的核心主题，再按需深入具体概念。练习可在知识点右键菜单打开。',type:'knowledge',relation:'组成',formula:'',example:'',sources:[],materialIds:[material.id],outline};}):ordered.flatMap(material=>outlines.get(material.id));
+ const nodes=node.id===graph.root?ordered.map(material=>{const outline=outlines.get(material.id);const intro=introductions.get(material.id);return {...intro,title:material.name.replace(/\.pdf$/i,'').slice(0,100),summary:intro.summary,type:'knowledge',relation:'组成',materialIds:[material.id],outline};}):ordered.flatMap(material=>outlines.get(material.id));
  const count=nodes=>nodes.reduce((sum,n)=>sum+1+(n.outline?count(n.outline):0),0);
  if(graph.nodes.length+count(nodes)>5000)throw new Error('知识点超过当前图容量，请分图整理');
  const concepts=[...outlines.values()].reduce((sum,nodes)=>sum+count(nodes),0);

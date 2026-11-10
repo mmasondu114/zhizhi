@@ -1,3 +1,4 @@
+import {introduction} from './lesson-fixture.js';
 import {chromium} from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -10,7 +11,7 @@ const root=path.resolve(import.meta.dirname,'..'),dir=await fs.mkdtemp(path.join
 const app=await createApp({dataDir:dir,port}),server=app.listen(port,'127.0.0.1');await new Promise(r=>server.once('listening',r));
 let releaseAudit;const auditGate=new Promise(r=>releaseAudit=r);
 const concept={title:'抽样分布（Sampling distribution）',summary:'统计量在重复抽样中的分布。',detail:'先区分样本数据的分布与统计量的抽样分布。',type:'knowledge',relation:'组成',sources:['s'],formula:'',example:'',webSources:[]};
-const mock=http.createServer(async(req,res)=>{let raw='';for await(const b of req)raw+=b;const ctx=JSON.parse(JSON.parse(raw).messages.at(-1).content);if(ctx.generationTask==='coverage-audit')await auditGate;const nodes=ctx.generationTask==='coverage-audit'?[]:ctx.generationTask==='hierarchy-synthesis'?ctx.candidates:[concept];res.setHeader('content-type','application/json');res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes})}}]}));});await new Promise(r=>mock.listen(0,'127.0.0.1',r));
+const mock=http.createServer(async(req,res)=>{let raw='';for await(const b of req)raw+=b;const ctx=JSON.parse(JSON.parse(raw).messages.at(-1).content);if(ctx.generationTask==='coverage-audit')await auditGate;const nodes=ctx.generationTask==='chapter-introduction'?[introduction(ctx)]:ctx.generationTask==='coverage-audit'?[]:ctx.generationTask==='hierarchy-synthesis'?ctx.candidates:[concept];res.setHeader('content-type','application/json');res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes})}}]}));});await new Promise(r=>mock.listen(0,'127.0.0.1',r));
 const boot=await fetch(base+'/api/bootstrap').then(r=>r.json()),headers={'content-type':'application/json','x-tree-token':boot.token};
 const graph=makeGraph('预览与交互测试','live');graph.materials=[{id:'m',name:'统计教材.pdf',chunks:[{id:'s',paragraph:1,text:'抽样分布的定义。'}]}];
 await fetch(base+'/api/graphs/'+graph.id,{method:'PUT',headers,body:JSON.stringify(graph)});
