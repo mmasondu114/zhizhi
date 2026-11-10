@@ -110,14 +110,22 @@ function App(){
  function center(id){clearTimeout(cameraTimer.current);const n=gRef.current?.nodes.find(n=>n.id===id);if(n){setSelected(id);flow.setCenter(n.position.x+NODE_WIDTH/2,n.position.y+nodeHeight(n)/2,{zoom:Math.max(1,flow.getZoom()),duration:matchMedia('(prefers-reduced-motion: reduce)').matches?0:200});}}
  function locate(id){const old=gRef.current;if(ancestors(old,id).some(n=>n.collapsed))commit(reveal(old,id));setTimeout(()=>center(id),30);}
  async function generate(id,{force=false,skipOverview=false}={}){
-  const g=gRef.current,n=g?.nodes.find(n=>n.id===id);if(!n||inflight.current.has(id))return;setSelected(id);if(!force&&!skipOverview&&n.materialIds?.length){setDetail(true);return;}if(!force&&n.prepared&&!n.outline?.length&&!children(g,id).length){setDetail(!(selected===id&&detail));return;}if(!force&&children(g,id).length){commit(layout({...g,nodes:g.nodes.map(x=>x.id===id?{...x,collapsed:!x.collapsed}:x)},id));return;}
-  const kind=settingsRef.current?.selected||'demo';if(kind==='demo'&&g.mode!=='demo'){notify('请先在设置中连接模型；预置演示仅支持 z-score 示例。');setModal('settings');return;}
+  const g=gRef.current,n=g?.nodes.find(n=>n.id===id);if(!n||inflight.current.has(id))return;setSelected(id);
+  // Existing branches and prepared outlines take precedence over chapter lectures.
+  if(!force&&children(g,id).length){setDetail(false);commit(layout({...g,nodes:g.nodes.map(x=>x.id===id?{...x,collapsed:!x.collapsed}:x)},id));return;}
+  const hasCachedOutline=!force&&!!n.outline?.length;
+  if(!force&&!hasCachedOutline){
+   if(!skipOverview&&n.materialIds?.length){setDetail(true);return;}
+   if(n.prepared){setDetail(!(selected===id&&detail));return;}
+  }
+  const kind=settingsRef.current?.selected||'demo';if(!hasCachedOutline&&kind==='demo'&&g.mode!=='demo'){notify('请先在设置中连接模型；预置演示仅支持 z-score 示例。');setModal('settings');return;}
+  setDetail(false);
   if(force)cancelAll();
   const controller=new AbortController(),requestId=uid(),startEpoch=epoch.current;inflight.current.set(id,{controller,requestId});setBusy(v=>({...v,[id]:true}));setProgress(v=>({...v,[id]:{stage:'preparing',percent:0}}));setErrors(v=>({...v,[id]:''}));
   try{let nodes;if(!force&&n.outline?.length){nodes=n.outline;setProgress(v=>({...v,[id]:{stage:'cached',percent:100}}));}else if(kind==='demo'){await new Promise((resolve,reject)=>{const timer=setTimeout(resolve,380);controller.signal.addEventListener('abort',()=>{clearTimeout(timer);reject(new Error('请求已取消'));},{once:true});});nodes=n.type==='question'?demoAnswer(n.title,g.nodes.find(x=>x.id===n.parent)):demoChildren(n);}else{const result=await generation.current.request(g,id,kind,{signal:controller.signal,force,onPreview:p=>{if(!controller.signal.aborted&&epoch.current===startEpoch&&gRef.current?.id===g.id)setPreviews(v=>({...v,[id]:{...(v[id]||{}),[p.document.id]:p.document}}));},onProgress:p=>{if(!controller.signal.aborted&&epoch.current===startEpoch)setProgress(v=>({...v,[id]:p}));}});nodes=result.nodes;setConnection(result.connection||{kind,status:'connected'});}
    const current=gRef.current;if(controller.signal.aborted||epoch.current!==startEpoch||current.id!==g.id||!current.nodes.some(x=>x.id===id)||inflight.current.get(id)?.requestId!==requestId)return;
    let base=current;if(force){for(const c of children(current,id))base=removeBranch(base,c.id);}
-   const fresh=nodes.map(x=>({...x,...(n.prepared?{prepared:true}:{}),id:uid(),parent:id,status:'unlearned',collapsed:false,expanded:false,position:{x:n.position.x,y:n.position.y+LEVEL_GAP},origin:kind==='demo'?'demo':x.sources?.length?'material':'ai'}));
+   const fresh=nodes.map(x=>({...x,...(n.prepared?{prepared:true}:{}),id:uid(),parent:id,status:'unlearned',collapsed:false,expanded:false,position:{x:n.position.x,y:n.position.y+LEVEL_GAP},origin:!hasCachedOutline&&kind==='demo'?'demo':x.sources?.length?'material':'ai'}));
    commit(layout({...base,nodes:[...base.nodes.map(x=>x.id===id?{...x,expanded:true,collapsed:false,status:x.status==='unlearned'?'learning':x.status}:x),...fresh]},id));
    setPreviews(v=>{const next={...v};delete next[id];return next;});setProgress(v=>({...v,[id]:{stage:'complete',percent:100}}));setTimeout(()=>{if(epoch.current===startEpoch&&!inflight.current.has(id))setProgress(v=>{const next={...v};delete next[id];return next;});},1500);
    if(kind!=='demo')generation.current.schedule(gRef.current,fresh,kind);
@@ -174,4 +182,5 @@ function Outline({graph,selected,locate,collapse}){const byId=new Map(graph.node
 function Modal({title,onClose,wide,children}){return <div className="modal-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}><section className={'modal '+(wide?'wide':'')} role="dialog" aria-modal="true" aria-label={title}><div className="modal-title"><h2>{title}</h2><IconButton label="关闭窗口" onClick={onClose}><X size={19}/></IconButton></div>{children}</section></div>;}
 function EditNode({node,save}){if(!node)return null;return <form onSubmit={e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget));save(d);}}><label>标题<input name="title" required maxLength={100} defaultValue={node.title}/></label><p className="muted small-copy">在要点或解释中用 **文字** 标红某一段重点；也可通过右键菜单标记整个节点。</p><label>一句核心要点<textarea name="summary" required maxLength={320} defaultValue={node.summary}/></label><label>详细解释<textarea name="detail" rows={5} required maxLength={10000} defaultValue={node.detail}/></label><label>公式（LaTeX）<input name="formula" maxLength={2000} defaultValue={node.formula}/></label><button className="primary full">保存修改</button></form>;}
 createRoot(document.getElementById('root')).render(<ReactFlowProvider><App/></ReactFlowProvider>);
+
 
