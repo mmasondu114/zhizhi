@@ -36,7 +36,17 @@ export function mergeKnowledge(nodes){
 export async function generateComplete(config,graph,node,{signal,onProgress=()=>{},onPreview=()=>{},provider=callProvider,cache,concurrency}={}){
  const stop=new AbortController();signal=signal?AbortSignal.any([signal,stop.signal]):stop.signal;
  let reused=0;
- const invoke=async(context,onProgress)=>{signal.throwIfAborted();const run=()=>retryRateLimited(()=>provider(config,context,{signal,onProgress,timeoutMs:context.generationTask?Math.max(config.timeoutMs||180000,context.generationTask==='hierarchy-synthesis'?600000:300000):undefined}),{signal,onWait:onProgress});if(!cache)return run();const result=await cache.run(config,context,run);signal.throwIfAborted();if(result.cached)reused++;return result.nodes;};
+ const invoke=async(context,onProgress)=>{
+  signal.throwIfAborted();
+  const run=()=>retryRateLimited(()=>provider(config,context,{signal,onProgress,timeoutMs:context.generationTask?Math.max(config.timeoutMs||180000,context.generationTask==='hierarchy-synthesis'?600000:300000):undefined}),{signal,onWait:onProgress});
+  try{
+   if(!cache)return await run();
+   const result=await cache.run(config,context,run);signal.throwIfAborted();if(result.cached)reused++;return result.nodes;
+  }catch(error){
+   if(error.code==='GENERATION_FORMAT'&&context.document)error.message=context.document+'：'+error.message;
+   throw error;
+  }
+ };
  const base={goal:graph.goal,foundation:graph.foundation,instructions:graph.instructions,scope:graph.scope,path:ancestors(graph,node.id).slice(-12).map(n=>({title:n.title,summary:n.summary,type:n.type})),current:{title:node.title,summary:node.summary,type:node.type,detail:node.detail},question:node.type==='question'?node.title:null};
  const exhaustive=graph.materials.length>0&&(node.id===graph.root||node.materialIds?.length);
  if(!exhaustive){

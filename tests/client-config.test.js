@@ -39,6 +39,8 @@ test('Codex request inherits configured model, explicit model wins, tools remain
   await fs.writeFile(path.join(dir,'config.toml'),'model="configured-model"\nmodel_reasoning_effort="high"\n[hooks]\ncommand="must-not-run"');
   assert.deepEqual(await configuredCodexPreferences(dir),{model:'configured-model',reasoningEffort:'high'});
   assert.equal((await resolveCodexConfig({kind:'codex',reasoningEffort:''})).reasoningEffort,'high');
+  assert.equal((await resolveCodexConfig({kind:'codex',model:'configured-model'})).reasoningEffort,'high','legacy settings inherit the existing client preference');
+  assert.equal((await resolveCodexConfig({kind:'codex',model:'override',reasoningEffort:'low'})).reasoningEffort,'low','an explicit selection must still win');
   assert.equal((await resolveCodexConfig({kind:'codex',model:'override',reasoningEffort:'low'})).model,'override');
   const client=path.join(dir,'fake-codex.mjs');
   await fs.writeFile(client,`const args=process.argv.slice(2);
@@ -53,7 +55,7 @@ else{
   for(const [model,expected]of [['','configured-model'],['chosen-model','chosen-model']]){
    const result=await callProvider({kind:'codex',clientPath:client,model},{materials:[]});
    assert.equal(result[0].title,expected);
-   assert.equal(result[0].detail,'"low"');
+   assert.equal(result[0].detail,'"high"');
   }
   for(const {id:reasoningEffort}of REASONING_LEVELS){for(const generationTask of ['inventory','coverage-audit','hierarchy-synthesis']){
    const result=await callProvider({kind:'codex',clientPath:client,model:'gpt-6.1-sol',reasoningEffort},{generationTask,materials:[]});

@@ -25,8 +25,9 @@ export async function configuredCodexPreferences(home=process.env.CODEX_HOME||pa
 export async function configuredCodexModel(home){return (await configuredCodexPreferences(home)).model;}
 export async function resolveCodexConfig(config){
  if(config.kind!=='codex')return config;
- const preferences=(!config.model?.trim()||config.reasoningEffort==='')?await configuredCodexPreferences():{};
- return {...config,model:config.model?.trim()||preferences.model||'',reasoningEffort:config.reasoningEffort===''?preferences.reasoningEffort||'':config.reasoningEffort??'low'};
+ const followEffort=config.reasoningEffort==null||config.reasoningEffort==='';
+ const preferences=(!config.model?.trim()||followEffort)?await configuredCodexPreferences():{};
+ return {...config,model:config.model?.trim()||preferences.model||'',reasoningEffort:followEffort?preferences.reasoningEffort||'':config.reasoningEffort};
 }
 
 export function clientExitMessage(code,stderr,stdout){

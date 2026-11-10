@@ -1,4 +1,5 @@
 import {readProviderResponse} from './streaming.js';
+import {retryInvalidGeneration} from './generation-retry.js';
 import {REASONING_LEVELS} from '../shared/model-options.js';
 import {macClientCandidates} from './platform.js';
 import {resolveCodexConfig,clientExitMessage} from './client-config.js';
@@ -71,11 +72,14 @@ async function inspectClientUncached(kind,custom=''){
  const file=findClient(kind,custom);if(!file)return {installed:false,status:'未安装',path:''};
  try{const [cmd,args]=invocation(file,['--version']);const version=(await runProcess(cmd,args,{timeout:12000,maxBytes:20000})).trim();const [hc,ha]=invocation(file,kind==='codex'?['exec','--help']:['--help']);const help=await runProcess(hc,ha,{timeout:12000,maxBytes:100000});const supported=kind==='codex'?help.includes('--output-schema')&&help.includes('--sandbox')&&help.includes('--ignore-user-config'):help.includes('--tools')&&help.includes('--json-schema');return {installed:true,supported,version,path:file,status:supported?'已安装 · 需测试连接':'版本缺少安全非交互参数，请更新客户端'};}catch{return {installed:false,path:file,status:'安装损坏或无法启动'};}
 }
-export async function callProvider(config,context,{signal,timeoutMs,onProgress,responseSchema,parse,systemPrompt}={}){
+export async function callProvider(config,context,options={}){
+ return retryInvalidGeneration(formatCorrection=>callProviderOnce(config,context,{...options,formatCorrection}),{signal:options.signal,onRepair:options.onProgress});
+}
+async function callProviderOnce(config,context,{signal,timeoutMs,onProgress,responseSchema,parse,systemPrompt,formatCorrection}={}){
  const task=context.generationTask,allowEmpty=task==='coverage-audit',schema=responseSchema||(task==='hierarchy-synthesis'?hierarchySchema:task==='focused-layer'?focusedSchema:allowEmpty?{...outputSchema,properties:{...outputSchema.properties,nodes:{...outputSchema.properties.nodes,minItems:0}}}:outputSchema);
  const taskInstruction=task==='inventory'?'完整读完本批教材，提炼核心概念。合并重复页面；将假设条件、公式、步骤、例题中体现的方法纳入所属概念的解释。剔除逐题解答、具体数据的计算过程、纯复习提问、课程安排和页码标题。不要逐页或逐题生成节点。每个核心概念引用真实教材来源。':allowEmpty?'对照完整教材检查 existing 是否遗漏重要核心概念，仅补充遗漏的核心概念。不补充同一概念的新数值例题、重复讲解、每页小标题或练习答案；条件和细节可已包含在 detail 中。没有核心遗漏时返回 {"nodes":[]}。':'core-synthesis'===task?'这是最终核心知识树：综合全部 candidates，跨 PDF 合并同义概念和重复内容。输出一层清晰的核心概念，不按文件名、幻灯片页码或题号建目录。必要条件、公式、步骤和易错点放入概念 detail；题目和具体数值例子全部移出知识树。覆盖全部已提炼的核心范围，不添加教材外无关单元。可联网核对课程大纲，将实际查阅的网址记录为 webSources。':'';
  const layerInstruction=task==='concept-lesson'?'只为 current 这一个知识点输出恰好一个完整讲解节点。保留主题，不拆子节点。lessonOverview 说明要弄懂什么和用途；terms 逐一解释相关专有名词与英文原名；detail 从直觉到准确定义，再讲原理、使用条件和易混点；example 给一个简短例子。以教材和已有上下文为依据，不虚构来源。':task==='chapter-introduction'?'根据 document 和已复核的 candidates，输出恰好一个本章导学节点，不展开新的知识树。lessonOverview 精准说明这一章实际研究的对象、知识点之间的关系和学完能完成的具体任务；terms 汇总本章关键专有名词并逐一解释；detail 像老师开课时串联这些知识，说明学习顺序、必要基础与易混点，example 用一个简短例子引出本章问题。只使用 candidates 和提供的材料，不增加教材外知识，sources 从 allowedSourceIds 取值。':task==='hierarchy-synthesis'?'本次只整理 document 这一份 PDF。把 candidates 按语义组织为核心主题，每个主题下面的具体概念提前写入 outline。节点数量由内容决定，不设目标数量、不为凑数或压缩数量合并不相关概念。主题名必须概括实际内容，不使用第几组、更多内容等分页标签。简单主题直接讲清，不强行凑子层。保留全部核心知识，不按 PPT 页码或练习题拆分；条件、公式和步骤放在对应 detail。每个层级均有本 PDF 的来源。跨主题不重复，相关内容归入同一主题。':task==='focused-layer'?'只展开当前概念的一层，给出直接相关的核心子概念，节点数量由内容决定，不人为限制。由粗到细，不一次展开所有细节；公式、条件和步骤放在所属概念 detail。':'';
- const system=systemPrompt||(SYSTEM.replace(JSON.stringify(outputSchema),JSON.stringify(schema))+'\n'+taskInstruction+'\n'+layerInstruction);
+ const system=(systemPrompt||(SYSTEM.replace(JSON.stringify(outputSchema),JSON.stringify(schema))+'\n'+taskInstruction+'\n'+layerInstruction))+(formatCorrection?'\n上一次输出未通过结构校验：'+formatCorrection+'。请针对这些字段重新输出完整 JSON，严格满足 schema 的类型和长度要求；保持原教材核心范围，不截断内容，不改变任务。长英文术语保留在 terms/detail，标题与 summary 简洁准确。':'');
  const allowed=[...(context.materials?.map(m=>m.id)||[]),...(context.allowedSourceIds||[])];
  const decode=raw=>parse?parse(raw):parseGeneration(raw,allowed,{allowEmpty});
  const timeout=timeoutMs||config.timeoutMs||120000;const content=JSON.stringify(context);const deadline=AbortSignal.timeout(timeout);const combined=signal?AbortSignal.any([signal,deadline]):deadline;

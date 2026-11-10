@@ -12,12 +12,32 @@ export const outputSchema={type:'object',additionalProperties:false,properties:{
 const lessonProperties={lessonOverview:{type:'string'},terms:{type:'array',items:{type:'object',additionalProperties:false,properties:{name:{type:'string'},english:{type:'string'},definition:{type:'string'}},required:['name','english','definition']}}};
 Object.assign(outputSchema.properties.nodes.items.properties,lessonProperties);
 outputSchema.properties.nodes.items.required.push('lessonOverview','terms');
+// Keep the model's output contract aligned with the validator below. Previously
+// valid schema output could still fail locally (for example a bilingual title).
+const outputNode=outputSchema.properties.nodes.items.properties;
+for(const [key,maxLength] of Object.entries({title:100,summary:320,detail:10000,formula:2000,example:4000,lessonOverview:4000})){
+ Object.assign(outputNode[key],{maxLength,...(['title','summary','detail'].includes(key)?{minLength:1}:{})});
+}
+Object.assign(outputNode.sources,{maxItems:8});Object.assign(outputNode.sources.items,{maxLength:100});
+Object.assign(outputNode.webSources,{maxItems:6});
+Object.assign(outputNode.webSources.items.properties.title,{minLength:1,maxLength:200});
+Object.assign(outputNode.webSources.items.properties.url,{maxLength:2000});
+Object.assign(outputNode.terms,{maxItems:100});
+for(const [key,maxLength] of Object.entries({name:160,english:240,definition:1600}))Object.assign(outputNode.terms.items.properties[key],{maxLength,...(key==='english'?{}:{minLength:1})});
 export const focusedSchema=outputSchema;
 export const hierarchySchema={...focusedSchema,properties:{nodes:{...focusedSchema.properties.nodes,items:{...outputSchema.properties.nodes.items,properties:{...outputSchema.properties.nodes.items.properties,outline:{type:'array',items:outputSchema.properties.nodes.items}},required:[...outputSchema.properties.nodes.items.required,'outline']}}}};
+function invalidGeneration(message,issues=[]){const error=new Error(message);error.code='GENERATION_FORMAT';error.issues=issues;return error;}
+function describeIssue(issue){
+ const field=issue.path.map((p,i)=>typeof p==='number'?`[${p}]`:(i?'.':'')+p).join('')||'nodes';
+ if(issue.code==='too_big')return `${field}：最多 ${issue.maximum} ${issue.origin==='array'?'项':'个字符'}`;
+ if(issue.code==='too_small')return `${field}：至少 ${issue.minimum} ${issue.origin==='array'?'项':'个字符'}`;
+ if(issue.code==='invalid_type')return `${field}：需要 ${issue.expected} 类型`;
+ return `${field}：值不符合格式要求`;
+}
 export function parseGeneration(raw,allowedSources=[],{allowEmpty=false}={}){
- if(typeof raw!=='string'||raw.length>300000)throw new Error('模型输出为空或超过长度上限');
- let obj;try{obj=JSON.parse(raw.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));}catch{throw new Error('模型返回了非法 JSON，请重试');}
- const r=(allowEmpty?z.object({nodes:z.array(preparedNode)}):generationSchema).safeParse(obj);if(!r.success)throw new Error('模型输出结构不完整：需要有效的知识节点');
+ if(typeof raw!=='string'||raw.length>300000)throw invalidGeneration('模型输出为空或超过长度上限');
+ let obj;try{obj=JSON.parse(raw.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));}catch{throw invalidGeneration('模型返回了非法 JSON，请重试');}
+ const r=(allowEmpty?z.object({nodes:z.array(preparedNode)}):generationSchema).safeParse(obj);if(!r.success){const issues=r.error.issues.slice(0,6).map(describeIssue);throw invalidGeneration('模型输出结构不完整：'+issues.join('；'),issues);}
  function clean(nodes){const seen=new Set();for(const n of nodes){const k=n.title.toLowerCase().replace(/\s/g,'');if(seen.has(k))throw new Error('模型输出包含重复节点，请重试');seen.add(k);n.formula=normalizeFormula(n.formula);n.sources=n.sources.filter(id=>allowedSources.includes(id));if(n.outline)clean(n.outline);}}clean(r.data.nodes);return r.data.nodes;
 }
 export const nodeSchema=generatedNode.extend({prepared:z.boolean().optional(),layoutHeight:z.number().min(80).max(10000).optional(),materialIds:z.array(z.string().max(100)).max(50).optional(),outline:z.array(preparedNode).max(1000).optional(),id:text(100),parent:z.string().max(100).nullable(),status:z.enum(['unlearned','learning','understood']).default('unlearned'),collapsed:z.boolean().default(false),expanded:z.boolean().default(false),position:z.object({x:z.number().finite(),y:z.number().finite()}),origin:z.enum(['demo','ai','material','user']).default('user'),demoKey:z.string().max(100).optional(),highlighted:z.boolean().optional()});
