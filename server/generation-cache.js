@@ -12,7 +12,7 @@ export function generationCache(directory){
    const identity={version:2,system:SYSTEM,provider:{kind:config.kind,model:config.model,...(config.kind==='codex'?{reasoningEffort:config.reasoningEffort??'low'}:{}),baseUrl:config.baseUrl,clientPath:config.clientPath,webSearch:config.webSearch!==false},context};
    const key=createHash('sha256').update(JSON.stringify(identity)).digest('hex');
    const file=path.join(directory,key+'.json');
-   const check=nodes=>parseGeneration(JSON.stringify({nodes}),[...(context.materials?.map(c=>c.id)||[]),...(context.allowedSourceIds||[])],{allowEmpty:context.generationTask==='coverage-audit'});
+   const check=nodes=>parseGeneration(JSON.stringify({nodes}),[...(context.materials?.map(c=>c.id)||[]),...(context.allowedSourceIds||[])],{allowEmpty:['coverage-audit','lesson-review'].includes(context.generationTask)});
    const files=[file];
    // Only the schema changed: previous valid responses remain useful. Every
    // reused entry still passes the current validator and source checks below.

@@ -17,33 +17,26 @@ test('overview requests retain reasoning and worked examples alongside topics an
  const inventory={...context,generationTask:'inventory'};assert.equal(compactChapterContext(inventory),inventory);
 });
 
-test('nine fully audited textbooks need 27 calls with combined overviews instead of 36',async()=>{
+test('nine textbooks need 18 calls: direct lessons and one review each',async()=>{
  const graph=makeGraph('Unit 3','live');
  graph.materials=Array.from({length:9},(_,i)=>({id:'m'+i,name:'Chapter '+i+'.pdf',chunks:[{id:'s'+i,text:'Core textbook concepts',paragraph:1}]}));
  const calls=[],events=[];
  const result=await generateComplete({model:'gpt-6-astra',reasoningEffort:'high'},graph,graph.nodes[0],{onProgress:p=>events.push(p),provider:async(config,c)=>{
   assert.equal(config.model,'gpt-6-astra');assert.equal(config.reasoningEffort,'high');calls.push(c.generationTask);
-  if(c.generationTask==='inventory')return [introduction({...c,candidates:[],allowedSourceIds:c.materials.map(x=>x.id)})];
-  if(c.generationTask==='coverage-audit')return [];
+  if(c.generationTask==='lesson-review')return [];
   assert.equal(c.generationTask,'hierarchy-synthesis','a valid combined response must skip the separate intro request');
-  const intro=introduction(c);return [{...c.candidates[0],outline:c.candidates,chapterIntroduction:intro}];
+  const intro=introduction(c);return [{...intro,outline:[intro],chapterIntroduction:intro}];
  }});
- assert.equal(calls.length,27);assert.equal(calls.filter(t=>t==='coverage-audit').length,9);
+ assert.equal(calls.length,18);assert.equal(calls.filter(t=>t==='lesson-review').length,9);
  assert.equal(result.nodes.length,9);assert.equal(result.coverage.reviewedBatches,9);
  for(const n of result.nodes){assert.ok(n.lessonOverview);assert.ok(n.terms.length);assert.ok(n.outline[0].outline.length);assert.equal('chapterIntroduction' in n.outline[0],false);}
  assert.equal(events.at(-1).percent,100);assert.ok(events.every((e,i)=>!i||e.percent>=events[i-1].percent));
 });
 
-test('combined introduction is source checked; missing valid sources falls back to the existing intro stage',async()=>{
+test('missing optional chapter introduction uses an existing valid lesson without another model call',async()=>{
  const graph=makeGraph('3A','live');graph.materials=[{id:'m',name:'3A.pdf',chunks:[{id:'a',text:'Sampling',paragraph:1}]}];
- const intro=introduction({document:'3A.pdf',allowedSourceIds:['a'],candidates:[]});let fallback=0;
+ const intro=introduction({document:'3A.pdf',allowedSourceIds:['a'],candidates:[]});const tasks=[];
  const parsed=parseGeneration(JSON.stringify({nodes:[{...intro,chapterIntroduction:{...intro,sources:['invented']}}]}),['a']);
- assert.deepEqual(parsed[0].chapterIntroduction.sources,[]);
- assert.ok(hierarchySchema.properties.nodes.items.required.includes('chapterIntroduction'));
- const result=await generateComplete({},graph,graph.nodes[0],{provider:async(_,c)=>{
-  if(c.generationTask==='inventory')return [intro];if(c.generationTask==='coverage-audit')return [];
-  if(c.generationTask==='hierarchy-synthesis')return parsed;
-  fallback++;return [intro];
- }});
- assert.equal(fallback,1);assert.deepEqual(result.nodes[0].sources,['a']);
+ const result=await generateComplete({},graph,graph.nodes[0],{provider:async(_,c)=>{tasks.push(c.generationTask);return c.generationTask==='lesson-review'?[]:parsed;}});
+ assert.deepEqual(tasks,['hierarchy-synthesis','lesson-review']);assert.deepEqual(result.nodes[0].sources,['a']);
 });

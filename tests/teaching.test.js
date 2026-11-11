@@ -11,15 +11,13 @@ test('final lessons regain original reasoning and adjacent example steps from th
  graph.materials=[{id:'m',name:'statistics.pdf',chunks:[{id:'a',paragraph:1,text:'固定总体与抽样规则，样本统计量随样本改变。'},{id:'b',paragraph:2,text:'例子：总体为0、2、4，有放回抽两个；样本(0,2)均值为1。'},{id:'c',paragraph:3,text:'因为每个样本的均值只算一个点，统计量的分布不同于原始数据的分布。'}]}];
  const note={title:'抽样分布',summary:'统计量的分布',detail:'重复抽样得到统计量。',sources:['a'],example:''};let finalCalls=0;
  const result=await generateComplete({},graph,graph.nodes[0],{provider:async(_,context)=>{
-  if(context.generationTask==='inventory')return [note];
-  if(context.generationTask==='coverage-audit')return [];
+  if(context.generationTask==='lesson-review')return [];
   finalCalls++;
   assert.deepEqual(context.materials.map(c=>c.id),['a','b','c']);
   assert.ok(context.materials.some(c=>c.text.includes('(0,2)')));
-  if(context.generationTask==='chapter-introduction')return [introduction(context)];
   return [{...note,detail:'固定抽样规则后，每个可能样本产生一个统计量。',example:'(0,2)的样本均值为(0+2)/2=1，所以在均值1处记录一个点。'}];
  }});
- assert.equal(finalCalls,2);assert.match(result.nodes[0].outline[0].example,/记录一个点/);
+ assert.equal(finalCalls,1);assert.match(result.nodes[0].outline[0].example,/记录一个点/);
 });
 
 test('bounded teaching evidence prioritizes cited chunks and neighbors without truncating their text',()=>{
@@ -42,7 +40,7 @@ test('audit can enrich an existing concept with reasoning and an example without
 
 test('all new lessons require mechanisms, worked steps with reasons, and honest example provenance',()=>{
  assert.ok(SYSTEM.includes(TEACHING_RULE));
- for(const phrase of ['每一步为什么成立','最终结果及其在情境中的含义','改编或自拟时明确标注','不能只预告','不能留给学生自行补完'])assert.ok(SYSTEM.includes(phrase));
+ for(const phrase of ['一个贯穿的具体例子','每一步解释理由','最后解释答案','数据与算式一致'])assert.ok(SYSTEM.includes(phrase));
 });
 
 test('lesson diagrams survive generation and graph persistence while rejecting nonnumeric chart data',async()=>{

@@ -13,9 +13,8 @@ let delay=80,lastContext;const mock=http.createServer(async(req,res)=>{
  const context=JSON.parse(JSON.parse(text).messages[1].content);lastContext=context;
  // Hierarchy synthesis receives audited candidates, not raw material chunks.
  // Preserve their real source IDs instead of returning an ungrounded topic.
- const nodes=context.generationTask==='chapter-introduction'?[introduction(context)]:context.generationTask==='coverage-audit'?[]:
-  context.generationTask==='hierarchy-synthesis'?context.candidates:
-  [{title:'标准差的来源',summary:'教材说明标准差描述离散程度',detail:'引用已上传片段；其他内容不作为教材。',type:'knowledge',relation:'解释',formula:'',example:'',sources:context.materials.map(m=>m.id).slice(0,1)}];
+ const nodes=context.generationTask==='chapter-introduction'?[introduction(context)]:context.generationTask==='lesson-review'?[]:
+    [{title:'标准差的来源',summary:'教材说明标准差描述离散程度',detail:'引用已上传片段；其他内容不作为教材。',type:'knowledge',relation:'解释',formula:'',example:'',sources:context.materials.map(m=>m.id).slice(0,1)}];
  setTimeout(()=>{if(!res.destroyed)res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes})}}]}));},delay);
 });await new Promise(r=>mock.listen(0,'127.0.0.1',r));
 const server=(await createApp({port,dataDir:dir})).listen(port,'127.0.0.1');await new Promise(r=>server.once('listening',r));const boot=await fetch(base+'/api/bootstrap').then(r=>r.json());const headers={'Content-Type':'application/json','x-tree-token':boot.token};

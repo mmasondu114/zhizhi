@@ -3,7 +3,7 @@ import {callProvider} from './providers.js';
 import {teachingMaterials} from './teaching.js';
 import {sourceLanguageContext,nodeLanguageContext} from './language.js';
 import {ancestors} from '../shared/tree.js';
-import {relevantChunks} from '../shared/protocol.js';
+import {relevantChunks,parseGeneration} from '../shared/protocol.js';
 
 export function materialBatches(materials,maxCharacters=24000){
  const batches=[];
@@ -69,67 +69,68 @@ export async function generateComplete(config,graph,node,{signal,onProgress=()=>
  }
  const materials=node.id===graph.root?graph.materials:graph.materials.filter(m=>node.materialIds.includes(m.id));
  if(!materials.length)throw new Error('该章节的教材已移除，请重新梳理教材');
- const batches=materialBatches(materials),total=batches.length*2+materials.length*2+2;let completed=0;
+ const batches=materialBatches(materials,64000);
+ const groups=materials.map(material=>batches.filter(b=>b.material.id===material.id));
+ const total=2+batches.length*2+groups.filter(g=>g.length>1).length*2;
+ let completed=0,scannedChunks=0,auditPasses=0,cursor=0,failure;
+ const finished=new Map();
  const status=(stage,extra={})=>onProgress({stage,percent:Math.floor(completed/total*100),completed,total,reused,...extra});
- status('planning');signal?.throwIfAborted();completed++;status('reading');
- const outlines=new Map(),introductions=new Map();
- let scannedChunks=0,auditPasses=0;
- const results=new Array(batches.length),groups=materials.map(material=>batches.map((b,i)=>b.material.id===material.id?i:-1).filter(i=>i>=0));const lanes=Math.max(1,Math.min(Math.floor(concurrency)||groups.length,groups.length));let cursor=0,failure;
+ const lanes=Math.max(1,Math.min(Math.floor(concurrency)||groups.length,groups.length));
+ status('planning');signal.throwIfAborted();completed++;status('reading');
+ const check=(nodes,sourceIds)=>{
+  const parsed=parseGeneration(JSON.stringify({nodes}),sourceIds);
+  const visit=list=>{for(const item of list){if(!item.sources.length)throw new Error('讲解缺少教材来源，请重试');if(item.outline?.length)visit(item.outline);}};
+  visit(parsed);return parsed;
+ };
+ const review=async(context,nodes,detail)=>{
+  status('reviewing',detail);
+  const corrections=await invoke({...context,generationTask:'lesson-review',existing:nodes},p=>status('reviewing',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
+  signal.throwIfAborted();auditPasses++;
+  // The review returns complete replacements, so a corrected explanation never
+  // gets appended to an incorrect one. There is no repeated audit loop.
+  const corrected=new Map(nodes.map(n=>[n.title.trim().toLowerCase(),n]));
+  for(const n of corrections)corrected.set(n.title.trim().toLowerCase(),n);
+  const result=check([...corrected.values()],context.allowedSourceIds);
+  completed++;status('reviewed',detail);return result;
+ };
+ const clean=nodes=>nodes.map(n=>{const {outline,chapterIntroduction,...rest}=n;return {...rest,prepared:true,...(outline?.length?{outline:clean(outline)}:{})};});
  async function worker(){
   while(cursor<groups.length){
-   signal.throwIfAborted();const indices=groups[cursor++];
-   for(const i of indices){
-   signal.throwIfAborted();const {material,chunks}=batches[i];
-   const context={...base,sourceLanguageContext:sourceLanguageContext([material]),materials:chunks,document:material.name,batch:i+1,batchCount:batches.length};
-   const detail={file:material.name,batch:i+1,batches:batches.length,parallel:lanes};
-   status('reading',detail);
-   const extracted=await invoke({...context,generationTask:'inventory'},p=>status('reading',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
-   signal.throwIfAborted();
-   if(!extracted.length||extracted.some(n=>!n.sources?.length))throw new Error(material.name+'：知识点缺少教材来源，请重试');
-   const preview=(nodes,reviewed=false)=>onPreview({document:{id:material.id,name:material.name,nodes:mergeKnowledge([...indices.filter(index=>index<i).flatMap(index=>results[index]||[]),...nodes]),reviewed}});
-   preview(extracted);
-   completed++;status('reviewing',detail);
-   let batchNodes=extracted,reviewed=false;
-   for(let round=1;round<=8;round++){
-    signal.throwIfAborted();status('reviewing',{...detail,reviewRound:round});
-    const missing=await invoke({...context,generationTask:'coverage-audit',existing:batchNodes},p=>status('reviewing',{...detail,reviewRound:round,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));auditPasses++;
-    signal.throwIfAborted();
-    if(missing.some(n=>!n.sources?.length))throw new Error(material.name+'：复核补充缺少来源，请重试');
-    if(!missing.length){reviewed=true;break;}
-    const combined=mergeKnowledge([...batchNodes,...missing]);
-    if(JSON.stringify(combined)===JSON.stringify(batchNodes))throw new Error(material.name+'：模型复核反复返回相同内容，尚未完成，请重试');
-    batchNodes=combined;
-    preview(batchNodes);
+   signal.throwIfAborted();const group=groups[cursor++],material=group[0].material;
+   const common={...base,sourceLanguageContext:sourceLanguageContext([material]),document:material.name};
+   const detail={file:material.name,parallel:lanes};let candidates=[];
+   for(let i=0;i<group.length;i++){
+    signal.throwIfAborted();const chunks=group[i].chunks;
+    const context={...common,materials:chunks,allowedSourceIds:chunks.map(c=>c.id),candidates:[],batch:i+1,batchCount:group.length};
+    const progressDetail={...detail,batch:i+1,batches:group.length};status('generating',progressDetail);
+    const drafted=check(await invoke({...context,generationTask:'hierarchy-synthesis'},p=>status('generating',{...progressDetail,providerStage:p.stage,characters:p.characters,bytes:p.bytes})),context.allowedSourceIds);
+    signal.throwIfAborted();completed++;
+    const verified=await review(context,drafted,progressDetail);
+    candidates.push(...verified);scannedChunks+=chunks.length;
+    if(group.length>1)onPreview({document:{id:material.id,name:material.name,nodes:clean(candidates),reviewed:true,complete:false}});
    }
-   if(!reviewed)throw new Error(material.name+'：仍有新增遗漏，未把部分结果当作完成，请拆分资料后重试');
-   results[i]=batchNodes;scannedChunks+=chunks.length;completed++;status('reviewed',detail);
-   preview(batchNodes,i===indices.at(-1));
+   if(group.length>1){
+    const context={...common,materials:teachingMaterials(material,candidates),allowedSourceIds:material.chunks.map(c=>c.id),candidates};
+    status('assembling',detail);
+    const drafted=check(await invoke({...context,generationTask:'hierarchy-synthesis'},p=>status('assembling',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes})),context.allowedSourceIds);
+    signal.throwIfAborted();completed++;candidates=await review(context,drafted,detail);
    }
-   const material=batches[indices[0]].material;
-   const candidates=mergeKnowledge(indices.flatMap(i=>results[i])).filter(n=>n.type!=='example'&&n.relation!=='举例');
-   if(!candidates.length)throw new Error(material.name+'：未提炼到核心概念');
-   const lessonMaterials=teachingMaterials(material,candidates);
-   const detail={file:material.name,parallel:lanes};status('assembling',detail);
-   const prepared=await invoke({...base,sourceLanguageContext:sourceLanguageContext([material]),generationTask:'hierarchy-synthesis',hierarchyVersion:2,document:material.name,materials:lessonMaterials,allowedSourceIds:material.chunks.map(c=>c.id),candidates},p=>status('assembling',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
-   function clean(nodes){if(!nodes.length)throw new Error(material.name+'：未整理到核心主题，请重试');return nodes.map(n=>{if(n.type==='example'||n.relation==='举例'||!n.sources.length)throw new Error(material.name+'：主题应为有教材依据的核心知识');const {outline,chapterIntroduction,...leaf}=n;return {...leaf,prepared:true,...(outline?.length?{outline:clean(outline)}:{})};});}
-   outlines.set(material.id,clean(prepared));completed++;status('assembling',detail);
-   const combinedIntro=prepared[0]?.chapterIntroduction;
-   const usableIntro=combinedIntro?.lessonOverview?.trim()&&combinedIntro?.terms?.length&&combinedIntro?.sources?.length;
-   // Older cached hierarchies remain valid and use their original separate intro.
-   const intro=usableIntro?[combinedIntro]:await invoke({...base,sourceLanguageContext:sourceLanguageContext([material]),generationTask:'chapter-introduction',document:material.name,materials:lessonMaterials,allowedSourceIds:material.chunks.map(c=>c.id),candidates:prepared},p=>status('assembling',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
-   if(intro.length!==1||!intro[0].lessonOverview?.trim()||!intro[0].terms?.length||!intro[0].sources?.length)throw new Error(material.name+'：章节概括或专有名词不完整，请重试');
-   introductions.set(material.id,intro[0]);completed++;status('reviewed',detail);
+   const prepared=clean(candidates);
+   const intro=candidates[0].chapterIntroduction?.sources?.length?candidates[0].chapterIntroduction:candidates[0];
+   const document={...intro,title:material.name.replace(/\.pdf$/i,'').slice(0,100),lessonOverview:intro.lessonOverview||intro.summary,terms:intro.terms||[],type:'knowledge',relation:'组成',materialIds:[material.id],outline:prepared};
+   delete document.chapterIntroduction;
+   finished.set(material.id,document);
+   signal.throwIfAborted();onPreview({document:{id:material.id,name:material.name,nodes:prepared,reviewed:true,complete:true}});
   }
  }
  await Promise.all(Array.from({length:lanes},()=>worker().catch(error=>{if(!failure)failure=error;stop.abort();})));
  if(failure)throw failure;
  signal.throwIfAborted();status('validating');
  const ordered=[...materials].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
- const nodes=node.id===graph.root?ordered.map(material=>{const outline=outlines.get(material.id);const intro=introductions.get(material.id);return {...intro,title:material.name.replace(/\.pdf$/i,'').slice(0,100),summary:intro.summary,type:'knowledge',relation:'组成',materialIds:[material.id],outline};}):ordered.flatMap(material=>outlines.get(material.id));
+ const documents=ordered.map(m=>finished.get(m.id));
+ const nodes=node.id===graph.root?documents:documents.flatMap(n=>n.outline);
  const count=nodes=>nodes.reduce((sum,n)=>sum+1+(n.outline?count(n.outline):0),0);
  if(graph.nodes.length+count(nodes)>5000)throw new Error('知识点超过当前图容量，请分图整理');
- const concepts=[...outlines.values()].reduce((sum,nodes)=>sum+count(nodes),0);
- const coverage={files:materials.length,chunks:scannedChunks,batches:batches.length,reviewedBatches:batches.length,auditPasses,concepts,coreConcepts:true,hierarchical:true};
+ const coverage={files:materials.length,chunks:scannedChunks,batches:batches.length,reviewedBatches:batches.length,auditPasses,concepts:documents.reduce((sum,n)=>sum+count(n.outline),0),coreConcepts:true,hierarchical:true};
  completed=total;status('complete',{coverage});return {nodes,coverage};
 }
-

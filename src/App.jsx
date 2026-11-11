@@ -1620,26 +1620,6 @@ function App() {
                     <Prose text={current.lessonOverview} />
                   </section>
                 )}
-                {current.terms?.length > 0 && (
-                  <>
-                    <h4>专有名词</h4>
-                    <dl className="lesson-terms">
-                      {current.terms.map((term, i) => (
-                        <div key={i}>
-                          <dt>
-                            {term.name}
-                            {term.english && (
-                              <span lang="en">{term.english}</span>
-                            )}
-                          </dt>
-                          <dd>
-                            <Prose text={term.definition} />
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </>
-                )}
                 {settings.selected !== 'demo' && (
                   <button
                     className="text-btn full"
@@ -1657,13 +1637,33 @@ function App() {
                   </button>
                 )}
                 <LessonVisuals visuals={current.visuals} />
-                <h4>老师讲解</h4>
-                <Prose text={current.detail} />
                 {current.example && (
                   <>
                     <h4>跟着例子做一遍</h4>
                     <Prose text={current.example} />
                   </>
+                )}
+                <h4>从例子理解原理</h4>
+                <Prose text={current.detail} />
+                {current.terms?.length > 0 && (
+                  <details className="lesson-glossary">
+                    <summary>需要时查看术语</summary>
+                    <dl className="lesson-terms">
+                      {current.terms.map((term, i) => (
+                        <div key={i}>
+                          <dt>
+                            {term.name}
+                            {term.english && (
+                              <span lang="en">{term.english}</span>
+                            )}
+                          </dt>
+                          <dd>
+                            <Prose text={term.definition} />
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </details>
                 )}
                 {current.materialIds?.length > 0 && (
                   <button

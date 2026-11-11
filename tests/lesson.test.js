@@ -28,9 +28,9 @@ test('refresh lesson respects the selected chapter and does not mutate its graph
  assert.equal(JSON.stringify(graph),before);
 });
 
-test('incomplete chapter introduction cannot become a completed knowledge tree',async()=>{
+test('a lesson without valid textbook sources cannot become a completed knowledge tree',async()=>{
  const graph=makeGraph('3A','live');graph.materials=[{id:'a',name:'3A.pdf',chunks:[{id:'a',text:'Sampling distribution',paragraph:1}]}];
  const events=[],lesson=introduction({document:'3A',candidates:[],allowedSourceIds:['a']});
- await assert.rejects(generateComplete({},graph,graph.nodes[0],{onProgress:p=>events.push(p),provider:async(_,c)=>c.generationTask==='coverage-audit'?[]:c.generationTask==='chapter-introduction'?[{...lesson,terms:[]}]:[lesson]}),/专有名词不完整/);
+ await assert.rejects(generateComplete({},graph,graph.nodes[0],{onProgress:p=>events.push(p),provider:async()=>[{...lesson,sources:[]}]}),/来源/);
  assert.ok(events.every(e=>e.percent<100));assert.equal(graph.nodes.length,1);
 });

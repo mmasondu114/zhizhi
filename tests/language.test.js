@@ -15,17 +15,17 @@ function fixture(){
 }
 const note=id=>({title:'Sampling distribution（抽样分布）',summary:'Variation across samples.\n样本间的变化。',detail:'Repeat the sampling process.\n重复抽样过程。',type:'knowledge',relation:'组成',sources:[id],formula:'',example:''});
 
-test('each PDF keeps its own original language evidence through extraction, audit, synthesis and introduction',async()=>{
+test('each PDF keeps its own original language evidence through direct lessons and review',async()=>{
  const graph=fixture(),seen=[];
  await generateComplete({},graph,graph.nodes[0],{provider:async(_,context)=>{
   seen.push(context);
   const material=graph.materials.find(m=>m.name===context.document);
   assert.deepEqual(context.sourceLanguageContext,[{file:material.name,samples:[material.chunks[0].text]}]);
-  if(context.generationTask==='coverage-audit')return [];
+  if(context.generationTask==='lesson-review')return [];
   if(context.generationTask==='chapter-introduction')return [introduction(context)];
   return [note(material.chunks[0].id)];
  }});
- for(const task of ['inventory','coverage-audit','hierarchy-synthesis','chapter-introduction'])assert.equal(seen.filter(c=>c.generationTask===task).length,2);
+ for(const task of ['hierarchy-synthesis','lesson-review'])assert.equal(seen.filter(c=>c.generationTask===task).length,2);
 });
 
 test('concept lessons and follow-up questions inherit the source PDF despite old Chinese content',async()=>{
@@ -65,7 +65,7 @@ test('all generation stages send the source-first translation policy without Chi
  app.post('/chat/completions',(req,res)=>{prompts.push(req.body.messages[0].content);res.json({choices:[{message:{content:JSON.stringify({nodes:[note('en-1')]})}}]});});
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
  try{
-  for(const generationTask of ['inventory','coverage-audit','hierarchy-synthesis','chapter-introduction','concept-lesson','focused-layer']){
+  for(const generationTask of ['hierarchy-synthesis','lesson-review','chapter-introduction','concept-lesson','focused-layer']){
    await callProvider({kind:'openai',baseUrl:'http://127.0.0.1:'+server.address().port,model:'test'},{generationTask,materials:[{id:'en-1',text:'Sampling distributions'}]});
   }
   for(const prompt of prompts){
