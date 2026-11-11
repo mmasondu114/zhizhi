@@ -44,3 +44,13 @@ test('all new lessons require mechanisms, worked steps with reasons, and honest 
  assert.ok(SYSTEM.includes(TEACHING_RULE));
  for(const phrase of ['每一步为什么成立','最终结果及其在情境中的含义','改编或自拟时明确标注','不能只预告','不能留给学生自行补完'])assert.ok(SYSTEM.includes(phrase));
 });
+
+test('lesson diagrams survive generation and graph persistence while rejecting nonnumeric chart data',async()=>{
+ const {parseGeneration,validateGraph}=await import('../shared/protocol.js');
+ const visual={kind:'bar',title:'Sample means（样本均值）',description:'Two samples produce 71.5.\n两个样本得到71.5。',axisLabel:'Probability（概率）',items:[{label:'69.5',value:1/6},{label:'71.5',value:1/3}]};
+ const node={title:'Sampling distributions',summary:'样本统计量的分布',detail:'解释原理',visuals:[visual]};
+ const parsed=parseGeneration(JSON.stringify({nodes:[node]}))[0];
+ const graph=makeGraph('sampling','live');graph.nodes[0]={...graph.nodes[0],...parsed};
+ assert.deepEqual(validateGraph(graph).nodes[0].visuals,[visual]);
+ assert.throws(()=>parseGeneration(JSON.stringify({nodes:[{...node,visuals:[{...visual,items:[{label:'x',value:'unknown'}]}]}]})));
+});

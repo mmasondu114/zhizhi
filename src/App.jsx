@@ -1,4 +1,5 @@
 import ConceptView from './ConceptView';
+import LessonVisuals from './LessonVisuals';
 import OperationGuide from './OperationGuide';
 import GenerationPreview from './GenerationPreview';
 import { reconcileFlowNodes } from './flow-nodes';
@@ -1655,6 +1656,7 @@ function App() {
                     )}
                   </button>
                 )}
+                <LessonVisuals visuals={current.visuals} />
                 <h4>老师讲解</h4>
                 <Prose text={current.detail} />
                 {current.example && (

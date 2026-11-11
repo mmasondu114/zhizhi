@@ -24,8 +24,8 @@ export function installLessons(app,{getSettings,configFor,requests}){
    const nodes=await callProvider(config,lessonContext(graph,node),{signal:controller.signal});
    if(controller.signal.aborted)return;
    if(nodes.length!==1||!nodes[0].lessonOverview?.trim()||!Array.isArray(nodes[0].terms))throw new Error('讲解不完整，请重试');
-   const {lessonOverview,terms,detail,formula,example,sources,webSources}=nodes[0];
-   res.json({lesson:{lessonOverview,terms,detail,formula,example,sources,webSources}});
+   const {lessonOverview,terms,detail,formula,example,visuals,sources,webSources}=nodes[0];
+   res.json({lesson:{lessonOverview,terms,detail,formula,example,visuals,sources,webSources}});
   }finally{if(requests.get(key)===controller)requests.delete(key);}
  });
 }

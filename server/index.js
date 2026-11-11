@@ -1,6 +1,6 @@
 import {installLessons} from './lessons.js';
 import {resolveCodexConfig} from './client-config.js';
-import {REASONING_LEVELS} from '../shared/model-options.js';
+import {REASONING_LEVELS,DEFAULT_CODEX_MODEL} from '../shared/model-options.js';
 import {generationCache} from './generation-cache.js';
 import {installExercises} from './exercises.js';
 import {generateComplete} from './complete-generation.js';
@@ -23,7 +23,7 @@ export async function createApp({dataDir=defaultDataDir({root}),port=Number(proc
  await fs.mkdir(path.join(dataDir,'graphs'),{recursive:true});
  const cache=generationCache(path.join(dataDir,'generation-cache'));
  const app=express(),token=randomBytes(32).toString('hex'),requests=new Map();const settingsFile=path.join(dataDir,'settings.json');
- const defaults={selected:'demo',providers:{openai:{kind:'openai',baseUrl:'',model:'',secret:'',timeoutMs:120000},anthropic:{kind:'anthropic',baseUrl:'https://api.anthropic.com/v1',model:'',secret:'',timeoutMs:120000},codex:{kind:'codex',model:'',reasoningEffort:'low',clientPath:'',timeoutMs:180000},claude:{kind:'claude',model:'',clientPath:'',timeoutMs:180000}}};
+ const defaults={selected:'demo',providers:{openai:{kind:'openai',baseUrl:'',model:'',secret:'',timeoutMs:120000},anthropic:{kind:'anthropic',baseUrl:'https://api.anthropic.com/v1',model:'',secret:'',timeoutMs:120000},codex:{kind:'codex',model:DEFAULT_CODEX_MODEL,reasoningEffort:'',clientPath:'',timeoutMs:180000},claude:{kind:'claude',model:'',clientPath:'',timeoutMs:180000}}};
  let settings=await readJson(settingsFile,defaults);const publicSettings=()=>({...settings,providers:Object.fromEntries(Object.entries(settings.providers).map(([id,p])=>{const {secret,...rest}=p;return [id,{...rest,hasKey:!!secret}];}))});
  let configEpoch=0,connection={kind:settings.selected,status:settings.selected==='demo'?'disconnected':'unverified'};
  const connected=kind=>{connection={kind,status:'connected',verifiedAt:new Date().toISOString()};};
