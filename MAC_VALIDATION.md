@@ -1,5 +1,14 @@
 # 桌面安装版验证记录
 
+## 1.2.0.1 · PDF 原文语言与中文翻译
+
+验证日期：2026-11-11。双平台流水线：[GitHub Actions 43015035185](https://github.com/mmasondu114/zhizhi/actions/runs/43015035185)，构建提交 `f0ff00f8320feaeda7db7feb1d85978f08a5c972`。
+
+- Mac ARM 与 Windows x64 均通过单元、界面、桌面窗口和真实安装启动验证；同版本覆盖安装保留知识图及可解密凭据，Windows 另验证卸载保留学习数据。
+- 新增语言回归检查：逐份 PDF 的原文样本贯穿提炼、复核、整理、导学；旧中文节点及中文作答不会丢失所属教材语言依据；生成与批改统一传递原文优先、中文翻译规则。
+- 本机单元测试 98 项通过，生产构建成功。模型响应使用模拟服务，本次未执行真实模型生成质量验证。已有知识树保留原内容，重新梳理后应用新规则。
+- 两份 1.2.0.1 安装包和 `SHA256SUMS.txt`、`Mac-validation.json`、`Windows-validation.json` 已发布到 testing；正式版不变。
+
 ## 1.2.0 · 独立应用窗口
 
 最终双平台流水线：[GitHub Actions 42450294784](https://github.com/mmasondu114/zhizhi/actions/runs/42450294784)。
