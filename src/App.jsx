@@ -1650,10 +1650,8 @@ function App() {
                         <Loader2 size={16} className="spin" />
                         正在准备讲解…
                       </>
-                    ) : current.lessonOverview ? (
-                      '重新讲解这个知识点'
                     ) : (
-                      '补全概括、专有名词和讲解'
+                      '讲透原理和例子'
                     )}
                   </button>
                 )}
@@ -1661,7 +1659,7 @@ function App() {
                 <Prose text={current.detail} />
                 {current.example && (
                   <>
-                    <h4>一个例子</h4>
+                    <h4>跟着例子做一遍</h4>
                     <Prose text={current.example} />
                   </>
                 )}

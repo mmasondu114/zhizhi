@@ -1,5 +1,6 @@
 import {retryRateLimited} from './generation-retry.js';
 import {callProvider} from './providers.js';
+import {teachingMaterials} from './teaching.js';
 import {sourceLanguageContext,nodeLanguageContext} from './language.js';
 import {ancestors} from '../shared/tree.js';
 import {relevantChunks} from '../shared/protocol.js';
@@ -29,7 +30,7 @@ export function mergeKnowledge(nodes){
    old.detail=detail;
   }
   old.sources=[...new Set([...old.sources,...node.sources])].slice(0,8);
-  if(node.example&&!old.example.includes(node.example))old.example=[old.example,node.example].filter(Boolean).join('\n').slice(0,4000);
+  if(node.example&&!old.example.includes(node.example)){const example=[old.example,node.example].filter(Boolean).join('\n\n');if(example.length>4000)throw new Error('同一知识点的示例过长，请整理为完整且不重复的示例后重试');old.example=example;}
  }
  return [...merged.values()];
 }
@@ -99,14 +100,15 @@ export async function generateComplete(config,graph,node,{signal,onProgress=()=>
    const material=batches[indices[0]].material;
    const candidates=mergeKnowledge(indices.flatMap(i=>results[i])).filter(n=>n.type!=='example'&&n.relation!=='举例');
    if(!candidates.length)throw new Error(material.name+'：未提炼到核心概念');
+   const lessonMaterials=teachingMaterials(material,candidates);
    const detail={file:material.name,parallel:lanes};status('assembling',detail);
-   const prepared=await invoke({...base,sourceLanguageContext:sourceLanguageContext([material]),generationTask:'hierarchy-synthesis',hierarchyVersion:2,document:material.name,materials:[],allowedSourceIds:material.chunks.map(c=>c.id),candidates},p=>status('assembling',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
+   const prepared=await invoke({...base,sourceLanguageContext:sourceLanguageContext([material]),generationTask:'hierarchy-synthesis',hierarchyVersion:2,document:material.name,materials:lessonMaterials,allowedSourceIds:material.chunks.map(c=>c.id),candidates},p=>status('assembling',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
    function clean(nodes){if(!nodes.length)throw new Error(material.name+'：未整理到核心主题，请重试');return nodes.map(n=>{if(n.type==='example'||n.relation==='举例'||!n.sources.length)throw new Error(material.name+'：主题应为有教材依据的核心知识');const {outline,chapterIntroduction,...leaf}=n;return {...leaf,prepared:true,...(outline?.length?{outline:clean(outline)}:{})};});}
    outlines.set(material.id,clean(prepared));completed++;status('assembling',detail);
    const combinedIntro=prepared[0]?.chapterIntroduction;
    const usableIntro=combinedIntro?.lessonOverview?.trim()&&combinedIntro?.terms?.length&&combinedIntro?.sources?.length;
    // Older cached hierarchies remain valid and use their original separate intro.
-   const intro=usableIntro?[combinedIntro]:await invoke({...base,sourceLanguageContext:sourceLanguageContext([material]),generationTask:'chapter-introduction',document:material.name,materials:[],allowedSourceIds:material.chunks.map(c=>c.id),candidates:prepared},p=>status('assembling',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
+   const intro=usableIntro?[combinedIntro]:await invoke({...base,sourceLanguageContext:sourceLanguageContext([material]),generationTask:'chapter-introduction',document:material.name,materials:lessonMaterials,allowedSourceIds:material.chunks.map(c=>c.id),candidates:prepared},p=>status('assembling',{...detail,providerStage:p.stage,characters:p.characters,bytes:p.bytes}));
    if(intro.length!==1||!intro[0].lessonOverview?.trim()||!intro[0].terms?.length||!intro[0].sources?.length)throw new Error(material.name+'：章节概括或专有名词不完整，请重试');
    introductions.set(material.id,intro[0]);completed++;status('reviewed',detail);
   }

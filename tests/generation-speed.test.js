@@ -6,14 +6,14 @@ import {makeGraph} from '../src/demo.js';
 import {introduction} from './lesson-fixture.js';
 import {compactChapterContext} from '../server/providers.js';
 
-test('overview requests omit repeated lesson prose but retain every topic, formula and exact distinct term definition',()=>{
+test('overview requests retain reasoning and worked examples alongside topics and terminology',()=>{
  const term={name:'标准误',english:'Standard error',definition:'统计量抽样分布的标准差'};
- const node={title:'主题',summary:'关键含义',detail:'长篇重复讲解'.repeat(1000),formula:'SE',sources:['a'],terms:[term]};
+ const node={title:'主题',summary:'关键含义',detail:'长篇重复讲解'.repeat(1000),formula:'SE',example:'计算过程与结论',sources:['a'],terms:[term]};
  const context={generationTask:'chapter-introduction',candidates:[{...node,outline:[{...node,title:'子概念'}]}]};
  const before=JSON.stringify(context),compact=compactChapterContext(context);
  assert.equal(JSON.stringify(context),before);assert.equal(compact.candidates[0].outline[0].title,'子概念');
  assert.equal(compact.candidates[0].formula,'SE');assert.deepEqual(compact.terminology,[term]);
- assert.ok(!('detail' in compact.candidates[0]));assert.ok(JSON.stringify(compact).length<before.length/10);
+ assert.equal(compact.candidates[0].detail,node.detail);assert.equal(compact.candidates[0].example,node.example);assert.equal(compact.candidates[0].outline[0].detail,node.detail);
  const inventory={...context,generationTask:'inventory'};assert.equal(compactChapterContext(inventory),inventory);
 });
 
