@@ -2,12 +2,13 @@ import {z} from 'zod';
 import {validateGraph,relevantChunks} from '../shared/protocol.js';
 import {ancestors} from '../shared/tree.js';
 import {callProvider} from './providers.js';
+import {nodeLanguageContext} from './language.js';
 import {resolveCodexConfig} from './client-config.js';
 
 export function lessonContext(graph,node){
  const materials=relevantChunks(graph,node,ancestors(graph,node.id));
  const scoped=graph.materials.filter(m=>node.materialIds?.includes(m.id));
- return {generationTask:node.materialIds?.length?'chapter-introduction':'concept-lesson',goal:graph.goal,foundation:graph.foundation,instructions:graph.instructions,scope:graph.scope,document:scoped.map(m=>m.name).join(' / '),current:node,candidates:node.outline||graph.nodes.filter(n=>n.parent===node.id),materials,allowedSourceIds:scoped.flatMap(m=>m.chunks.map(c=>c.id))};
+ return {sourceLanguageContext:nodeLanguageContext(graph,node,ancestors(graph,node.id)),generationTask:node.materialIds?.length?'chapter-introduction':'concept-lesson',goal:graph.goal,foundation:graph.foundation,instructions:graph.instructions,scope:graph.scope,document:scoped.map(m=>m.name).join(' / '),current:node,candidates:node.outline||graph.nodes.filter(n=>n.parent===node.id),materials,allowedSourceIds:scoped.flatMap(m=>m.chunks.map(c=>c.id))};
 }
 
 export function installLessons(app,{getSettings,configFor,requests}){
