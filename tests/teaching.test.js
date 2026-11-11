@@ -35,7 +35,9 @@ test('audit can enrich an existing concept with reasoning and an example without
  const base={title:'抽样分布',formula:'',detail:'定义',example:'',sources:['a']};
  const enriched=mergeKnowledge([base,{...base,detail:'固定规则让不同样本的统计量可比较。',example:'(0,2)的均值是1，(2,4)的均值是3；每个均值在图上占一个点。',sources:['b']}]);
  assert.equal(enriched.length,1);assert.match(enriched[0].detail,/定义[\s\S]*固定规则/);assert.match(enriched[0].example,/占一个点/);assert.deepEqual(enriched[0].sources,['a','b']);
- assert.throws(()=>mergeKnowledge([{...base,example:'a'.repeat(3000)},{...base,example:'b'.repeat(2000)}]),/示例过长/);
+ const long=mergeKnowledge([{...base,example:'a'.repeat(3000)},{...base,example:'b'.repeat(2000)}])[0];
+ assert.equal(long.example,'a'.repeat(3000));assert.ok(long.detail.endsWith('b'.repeat(2000)));
+ assert.throws(()=>mergeKnowledge([{...base,detail:'x'.repeat(9000),example:'a'.repeat(3000)},{...base,detail:'x'.repeat(9000),example:'b'.repeat(2000)}]),/讲解与示例过长/);
 });
 
 test('all new lessons require mechanisms, worked steps with reasons, and honest example provenance',()=>{

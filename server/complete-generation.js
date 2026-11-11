@@ -30,7 +30,15 @@ export function mergeKnowledge(nodes){
    old.detail=detail;
   }
   old.sources=[...new Set([...old.sources,...node.sources])].slice(0,8);
-  if(node.example&&!old.example.includes(node.example)){const example=[old.example,node.example].filter(Boolean).join('\n\n');if(example.length>4000)throw new Error('同一知识点的示例过长，请整理为完整且不重复的示例后重试');old.example=example;}
+  if(node.example&&!old.example.includes(node.example)){
+   const example=node.example.includes(old.example)?node.example:[old.example,node.example].filter(Boolean).join('\n\n');
+   if(example.length<=4000)old.example=example;
+   else if(!old.detail.includes(node.example)){
+    const detail=old.detail+'\n\n'+node.example;
+    if(detail.length>10000)throw new Error('同一知识点的讲解与示例过长，请整理为完整且不重复的内容后重试');
+    old.detail=detail;
+   }
+  }
  }
  return [...merged.values()];
 }
