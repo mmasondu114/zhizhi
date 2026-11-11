@@ -1,0 +1,68 @@
+name: Publish verified Mac installer only
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Run containing the successful Mac build and validation
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish-mac:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: ${{ inputs.source_run }}
+    steps:
+      - name: Verify the source Mac job succeeded
+        shell: bash
+        run: |
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > run.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs?per_page=100" > jobs.json
+          jq -e '.jobs | any(.name == "build-test-release" and .conclusion == "success")' jobs.json
+          echo "SOURCE_SHA=$(jq -r .head_sha run.json)" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-arm64-validation
+          run-id: ${{ inputs.source_run }}
+          github-token: ${{ github.token }}
+          path: artifacts
+      - name: Verify package and validation reports
+        shell: bash
+        run: |
+          VERSION=$(jq -r .version artifacts/test-results/macos-install.json)
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]
+          jq -e '.passed == true and .platform == "darwin" and .arch == "arm64"' artifacts/test-results/macos-install.json
+          for report in browser-report desktop-report readability interaction-update regressions; do
+            jq -e '[.. | objects | select(.passed? == false)] | length == 0' "artifacts/test-results/$report.json"
+          done
+          (cd artifacts/release && sha256sum -c SHA256SUMS.txt)
+          test -s "artifacts/release/Zhizhi-$VERSION-macos-arm64.pkg"
+          cp artifacts/test-results/macos-install.json artifacts/release/Mac-validation.json
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Publish Mac only to testing
+        shell: bash
+        run: |
+          cat > notes.md <<'NOTES'
+          ## 本次仅 Mac 已完成
+
+          **Windows 更新未完成，暂不交付。发布页保留的 Windows 1.2.0 安装包和验证记录属于旧测试版。**
+
+          - 新绘制圆形知识枝条图标，统一 Mac 应用、Dock、窗口及网页图标。
+          - 主界面按画布、节点、正文公式与辅助面板拆分，保留原有交互。
+          - 统一 README 中 Mac / Windows 验证范围的说明，支持四段版本号。
+          - Mac 安装包已通过基础、浏览器、桌面、安装、启动、覆盖安装保留知识图与钥匙串凭据验证。
+          - 适用于 macOS 14+ Apple Silicon。安装前退出知枝；覆盖安装保留学习数据。
+          - 模型接口测试使用模拟服务，不代表真实 Mac Codex / Claude 账号验证。
+          - Mac 包尚未配置 Developer ID 身份签名及 Apple 公证。
+
+          本次只更新 testing 预发布，正式版保持不变。
+          NOTES
+          printf '\n版本：%s\n构建提交：%s\n验证运行：https://github.com/%s/actions/runs/%s\n' "$VERSION" "$SOURCE_SHA" "$GITHUB_REPOSITORY" "$SOURCE_RUN" >> notes.md
+          gh release upload testing "artifacts/release/Zhizhi-$VERSION-macos-arm64.pkg" artifacts/release/SHA256SUMS.txt artifacts/release/Mac-validation.json --clobber --repo "$GITHUB_REPOSITORY"
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/testing" -f sha="$SOURCE_SHA" -F force=true
+          gh release edit testing --title "知枝 $VERSION · 仅 Mac 已完成" --notes-file notes.md --prerelease --latest=false --repo "$GITHUB_REPOSITORY"
