@@ -16,7 +16,17 @@ let token=(await fetch(base+'/api/bootstrap').then(r=>r.json())).token;async fun
 async function check(name,fn){console.log('RUN '+name);const start=performance.now();try{await fn();reports.push({name,passed:true,ms:Math.round(performance.now()-start)});console.log('PASS '+name);}catch(e){reports.push({name,passed:false,error:e.message});console.log('FAIL '+name+' '+e.message);await page.screenshot({path:path.join(output,'failure-'+reports.length+'.png')}).catch(()=>{});}}
 async function waitSaved(){await page.getByRole('button',{name:/已保存在本机/}).waitFor();await page.waitForTimeout(150);}
 async function currentGraph(){await waitSaved();const id=await page.evaluate(()=>localStorage.getItem('zhizhi-last'));return api('/graphs/'+id);}
-async function seed(g){await api('/graphs/'+g.id,'PUT',g);await page.addInitScript(()=>localStorage.setItem('zhizhi-concept-mode','panel'));await page.goto(base);await page.evaluate(id=>{localStorage.removeItem('zhizhi-recovery');localStorage.setItem('zhizhi-last',id);},g.id);await page.reload();await page.getByRole('button',{name:'模型与设置'}).waitFor();await page.waitForTimeout(400);}
+async function seed(g){
+ // Finish the previous graph and leave its renderer before replacing the fixture.
+ // Otherwise beforeunload can restore the old recovery copy over our chosen graph.
+ if(await page.evaluate(()=>typeof window.zhizhiFlush==='function'))assert.equal(await page.evaluate(()=>window.zhizhiFlush()),true);
+ await page.goto(base+'/api/health');
+ await api('/graphs/'+g.id,'PUT',g);
+ await page.evaluate(id=>{localStorage.removeItem('zhizhi-recovery');localStorage.setItem('zhizhi-last',id);localStorage.setItem('zhizhi-concept-mode','panel');},g.id);
+ await page.goto(base);
+ await page.getByRole('button',{name:'模型与设置'}).waitFor();
+ await page.locator(`.react-flow__node[data-id="${g.root}"]`).waitFor();
+}
 async function locate(title){await page.getByRole('textbox',{name:'搜索知识点'}).fill(title);await page.locator('.search-result').first().click();await page.waitForTimeout(250);await page.getByRole('button',{name:'清空搜索'}).click();}
 const node=title=>page.locator('.react-flow__node').filter({has:page.locator('h3',{hasText:title})}).first();
 try{
