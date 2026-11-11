@@ -1,5 +1,6 @@
-export const TEACHING_RULE=`用一个贯穿的具体例子教会当前概念。lessonOverview 用一句话提出要解决的问题；example 先给已知信息，再逐步做出来，每一步解释理由，最后解释答案。detail 从这个例子归纳概念和原理，用短句说明为什么成立；新术语就地解释，有公式再说明符号，只讲与当前问题相关的条件和误区。不要一上来堆定义、术语表、抽象总览或冗长免责声明，也不要在多个字段重复同一段话。
-配一张与例子对应的 visuals 图：flow 按步骤画箭头，items 的 value=0；bar 按实际数据画数值图，axisLabel 写量和单位。标签简短，description 告诉学生看哪里、图说明什么。数据与算式一致，自拟例子注明“自拟”，不要编造实验或模拟结果。terms 只收录理解本例必需的词。summary 只概括核心意思。`;
+export const TEACHING_RULE=`学生沿思维导图逐层学习。标题是简短概念名，summary 一句话说清含义；主题讲清子概念的关系，具体概念讲清自己的原理，不在父子节点重复整段课程。
+用一个贯穿的具体例子教会当前概念：example 给已知信息和解题过程，每一步解释理由，最后解释答案；detail 用短句解释为什么成立和必要条件，不复述例题。新术语就地解释；只有额外帮助时才填 lessonOverview、terms、formula，否则用空字符串或空数组。无需凑篇幅，讲懂即止。
+visuals 配一张帮助理解的图：flow 表示过程（value=0），bar 表示真实数值（axisLabel 写单位）。description 简短指出该看哪里，不复述正文。数据与算式一致，自拟例子注明“自拟”。`;
 
 // Extraction has already read every chunk. Reattach original evidence when
 // writing lessons so condensed candidates cannot erase reasoning and examples.
