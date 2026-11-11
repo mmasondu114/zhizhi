@@ -1,0 +1,7 @@
+知枝 1.2.0.1 图标
+
+使用内置图片生成功能绘制，再转换为应用所需 PNG、ICO 和 ICNS 尺寸。
+本图不使用 Electron 官方图标。外部圆弧、知识节点、枝条与叶片组成独立图案。
+
+最终生成提示词：
+Create ONE clean vector-style desktop application icon. A perfectly circular SOLID PALE MINT GREEN disk (#D5EDE2), centered with 8% transparent margin on all sides of a square 1024x1024 canvas. The disk is FULLY OPAQUE and absolutely uniform. Inside is a thick dark forest green (#315B49) symbol: a graceful open circular arc surrounding a small branching knowledge-tree with three curved branches ending in three simple circular ring nodes, and two tiny leaf forms. A small filled node sits at the branching junction. Elegant calm geometric curves, rounded stroke caps, clean high contrast silhouette readable at 32px. Original custom logo for the learning application Zhizhi. No atom orbits, no Electron logo, no text. STRICTLY ONLY TWO FLAT SOLID COLORS, NO shading, NO gradient, NO texture, NO noise, NO glow, NO shadows, NO lighting. Do not punch any transparent holes within the pale disk; even ring interiors are solid pale mint. Real transparency ONLY OUTSIDE the perfectly circular disk. Finished icon, no scene or mockup.

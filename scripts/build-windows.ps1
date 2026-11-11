@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $projectRoot = (Get-Location).Path
 $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid version' }
+if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { throw 'Invalid version' }
 $buildRoot = Join-Path $projectRoot ('build\windows-' + [guid]::NewGuid().ToString('N'))
 $stage = Join-Path $buildRoot 'resources-stage'
 New-Item -ItemType Directory -Force -Path $stage,(Join-Path $stage 'backend'),(Join-Path $stage 'runtime'),(Join-Path $projectRoot 'release') | Out-Null

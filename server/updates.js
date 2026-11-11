@@ -4,14 +4,17 @@ const pkg=JSON.parse(await fs.readFile(new URL('../package.json',import.meta.url
 export const APP_VERSION=pkg.version;
 export const RELEASE_REPOSITORY='mmasondu114/zhizhi';
 export const RELEASES_URL=`https://github.com/${RELEASE_REPOSITORY}/releases`;
+function versionParts(value){
+ const match=/^v?(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$/.exec(value);
+ return match?match.slice(1).map(part=>Number(part||0)):null;
+}
 export function newerVersion(candidate,current=APP_VERSION){
- const parse=v=>/^v?(\d+)\.(\d+)\.(\d+)$/.exec(v)?.slice(1).map(Number);
- const a=parse(candidate),b=parse(current);if(!a||!b)return false;
- for(let i=0;i<3;i++){if(a[i]!==b[i])return a[i]>b[i];}return false;
+ const a=versionParts(candidate),b=versionParts(current);if(!a||!b)return false;
+ for(let i=0;i<4;i++){if(a[i]!==b[i])return a[i]>b[i];}return false;
 }
 export function releaseSummary(release,platform=process.platform){
  const version=String(release.tag_name||'').replace(/^v/,'');
- if(!/^\d+\.\d+\.\d+$/.test(version)||release.draft||release.prerelease)throw new Error('发布版本格式不正确');
+ if(!/^\d+\.\d+\.\d+(?:\.\d+)?$/.test(version)||release.draft||release.prerelease)throw new Error('发布版本格式不正确');
  const suffix=platform==='win32'?'windows-x64-setup.exe':platform==='darwin'?'macos-arm64.pkg':null;
  const asset=suffix?release.assets?.find(a=>a.name===`Zhizhi-${version}-${suffix}`):null;
  const expected=`https://github.com/${RELEASE_REPOSITORY}/releases/download/${release.tag_name}/${asset?.name}`;

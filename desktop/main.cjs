@@ -43,7 +43,9 @@ async function stopBackend(){
  log?.end();
 }
 async function createWindow(){
- window=new BrowserWindow({title:'知枝',icon:path.join(root,'dist','app-icon.png'),width:1440,height:960,minWidth:760,minHeight:560,show:!smoke,backgroundColor:'#faf9f7',autoHideMenuBar:true,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false,spellcheck:false}});
+ const icon=path.join(root,'dist','app-icon.png');
+ if(process.platform==='darwin')app.dock.setIcon(icon);
+ window=new BrowserWindow({title:'知枝',icon,width:1440,height:960,minWidth:760,minHeight:560,show:!smoke,backgroundColor:'#faf9f7',autoHideMenuBar:true,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false,spellcheck:false}});
  window.on('close',event=>{if(!quitting){event.preventDefault();app.quit();}});
  const wc=window.webContents;
  wc.on('render-process-gone',async(_event,details)=>{

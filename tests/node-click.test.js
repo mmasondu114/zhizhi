@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 // Exercise the application's click handler without requiring a display server.
-const source=fs.readFileSync(new URL('../src/main.jsx',import.meta.url),'utf8');
-const handler=source.slice(source.indexOf('async function generate('),source.indexOf(' const actions=useMemo('));
+const source=fs.readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8');
+const start=source.search(/async function generate\s*\(/),end=source.search(/\n\s*const actions\s*=\s*useMemo\s*\(/);
+assert.ok(start>=0&&end>start,'application click handler boundaries must exist');
+const handler=source.slice(start,end).trim();
 function setup(nodes,{provider='openai',detail=false}={}){
  const state={graph:{id:'graph',mode:'live',nodes},detail,selected:'chapter',requests:0,modal:null};
  const noop=()=>{};

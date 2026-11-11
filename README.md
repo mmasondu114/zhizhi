@@ -4,6 +4,8 @@
 
 ## 下载安装版
 
+当前测试版为 **1.2.0.1**，发布到固定的 `testing` 预发布，支持覆盖安装并保留学习数据；正式版保持不变。
+
 1.2.0 起为独立桌面窗口。未连接时，右上角点击「连接到 Agent」即可选择 Codex、Claude Code 或 API；实际验证成功才显示已连接，失败后可直接重试。
 
 从 [GitHub Releases](https://github.com/mmasondu114/zhizhi/releases/latest) 下载对应平台文件：
@@ -66,12 +68,12 @@ cd "你的项目目录"
 
 | 提供方 | 如何填写 | 当前验证情况 |
 |---|---|---|
-| Codex 本地客户端 | 自动检测桌面版与 npm CLI；模型可留空，也可指定；可填写 `.exe` / `.js` 绝对路径 | 本机独立应用→后端→已登录 Codex→知识节点完整链路通过；约 72 秒，生成 4 个 AI 子节点，见 MAC_VALIDATION.md |
+| Codex 本地客户端 | 自动检测桌面版与 npm CLI；模型可留空，也可指定；可填写 `.exe` / `.js` 绝对路径 | 历史 Windows 本机已验证独立应用→后端→已登录 Codex→知识节点完整链路；约 72 秒，生成 4 个 AI 子节点。Mac 真实账号接入尚未验证，见 MAC_VALIDATION.md |
 | OpenAI-compatible | 填实际 Base URL（通常含 `/v1`）、模型 ID、API Key；本地无密钥服务可以不填 Key | 已做实际 HTTP 协议模拟测试；未使用用户的真实第三方 API 凭据验证 |
 | Anthropic API | 默认 `https://api.anthropic.com/v1`，填写实际模型名和凭据 | 独立 Messages 协议测试通过；未进行付费真实请求 |
 | Claude Code 本地客户端 | 自动检测，或填可执行文件路径；需在官方客户端完成登录 | 本机未发现可用安装；仅完成参数构造、输出协议与进程管理测试 |
 
-应用检测本机可用客户端，不修改原有全局安装。界面里的连接检测会检查版本与必要参数。Windows 上曾以 `codex-cli 0.167.0-alpha.3.2` 完成真实验证；Mac 客户端登录与生成仍待实机验证。
+应用检测本机可用客户端，不修改原有全局安装。界面里的连接检测会检查版本与必要参数。Windows 上曾以 `codex-cli 0.167.0-alpha.3.2` 完成真实验证。macOS ARM CI 已验证桌面启动、模拟 API 连接及覆盖安装保留数据；这些测试不包含 Mac 上真实 Codex / Claude 账号的登录与生成，后者仍待实机验证。
 
 Codex 通过官方 `exec` 非交互模式运行，使用 `--ignore-user-config`、`--ignore-rules`、`--sandbox read-only`、`--ephemeral`、`--output-schema`，并关闭 shell、apps 与多代理功能。此版本要求客户端支持 `--ignore-user-config`；老版本会显示需要更新。Claude Code 使用 `-p`、JSON schema、空工具集、严格空 MCP 配置并禁用 hooks。两者均通过参数数组和 stdin 调用，不使用 shell 拼接，不读取或导出私有登录凭据。
 
@@ -114,6 +116,8 @@ Mac/Linux 浏览器测试先运行 `npx playwright install chromium`；Windows �
 
 ## 实现与边界
 
+前端入口为 `src/main.jsx`，负责样式加载与挂载。`src/App.jsx` 管理知识图、保存和生成流程；`GraphCanvas.jsx` 管理画布与拖动，`KnowledgeNode.jsx` 显示节点与生成状态，`TextContent.jsx` 统一正文与公式显示，`AppPanels.jsx` 放置大纲、弹窗和节点编辑表单。
+
 React + React Flow + Vite；Node/Express 本地后端；Zod 结构校验；KaTeX 公式；PDF.js 与 Mammoth 文本提取。图采用确定性自上而下树布局，展开时固定操作节点，调整受影响子树与相邻空间，不使用力导向布局。节点拖动的高频状态与应用面板隔离；缩放到概览级别时简化节点与连线标签。
 
 - “无限深入”指按需要持续生成，而非无穷存储：单图最多 5000 节点，撤销历史最多 40 步。超过数百节点建议折叠或聚焦子树；超大图全览有实际性能退化。
@@ -143,4 +147,4 @@ Windows 可使用 scripts/open-windows.ps1 从桌面 Shell 打开应用，避免
 
 英文教材的知识点保留专业术语原文，如“抽样分布（Sampling distribution）”。较长术语和多个概念的对照放在详情，解释仍用中文；练习与解析沿用教材术语。
 
-拖动节点靠近本次拖动前的位置时，会显示“松手归位”轮廓框，松手精确回到原位；拖远后正常自由放置。拖动期间暂停自动重排，避免节点被旧位置拉回。
+拖动节点靠近本次拖动前的位置时，会显示淡青绿轮廓（不显示提示文字），松手精确回到原位；拖远后正常自由放置。拖动期间暂停自动重排，避免节点被旧位置拉回。

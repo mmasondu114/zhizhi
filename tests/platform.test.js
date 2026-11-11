@@ -23,6 +23,21 @@ test('update versions compare numerically and reject prerelease or malformed val
  assert.equal(newerVersion('0.9.0','1.0.0'),false);
  assert.equal(newerVersion('1.2.0-evil','1.1.0'),false);
  assert.equal(newerVersion('<script>','1.1.0'),false);
+ assert.equal(newerVersion('1.2.0.1','1.2.0'),true);
+ assert.equal(newerVersion('v1.2.0.10','1.2.0.2'),true);
+ assert.equal(newerVersion('1.2.0','1.2.0.1'),false);
+ assert.equal(newerVersion('1.2.0.0','1.2.0'),false);
+ assert.equal(newerVersion('1.2.1','1.2.0.99'),true);
+ for(const invalid of ['1.2.0.1-beta','1.2.0.1.2','1.2.0.','1.2'])assert.equal(newerVersion(invalid,'1.2.0'),false);
+});
+test('four-part releases retain their version and exact platform installer URL',()=>{
+ for(const [platform,suffix] of [['darwin','macos-arm64.pkg'],['win32','windows-x64-setup.exe']]){
+  const name=`Zhizhi-1.2.0.1-${suffix}`,url=`https://github.com/mmasondu114/zhizhi/releases/download/v1.2.0.1/${name}`;
+  const result=releaseSummary({tag_name:'v1.2.0.1',assets:[{name,browser_download_url:url}]},platform);
+  assert.equal(result.version,'1.2.0.1');assert.equal(result.downloadUrl,url);
+ }
+ assert.throws(()=>releaseSummary({tag_name:'v1.2.0.1.2'}));
+ assert.throws(()=>releaseSummary({tag_name:'v1.2.0.1',prerelease:true}));
 });
 test('update downloads are restricted to the exact repository release asset',()=>{
  const name='Zhizhi-1.2.0-macos-arm64.pkg',url='https://github.com/mmasondu114/zhizhi/releases/download/v1.2.0/'+name;
